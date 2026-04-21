@@ -37,6 +37,7 @@ include("types/abstract_types.jl")
 include("types/iop.jl")
 include("types/layer_optics.jl")
 include("types/ocean_layer.jl")
+include("types/ocean_column.jl")
 
 # -----------------------------------------------------------------------------
 # I/O: reference-data loaders and interpolation
@@ -95,8 +96,10 @@ export NonAlgalParticles, AbstractNAPModel, BabinBricaud2003, FellMineral
 export FournierForandPhase, RayleighWaterPhase, HenyeyGreensteinPhase, PetzoldPhase
 
 # Bundles
-export IOP, OceanLayer, OceanLayerOptics
+export IOP, OceanLayer, OceanColumn, OceanLayerOptics
 export thickness, midpoint_depth, n_moments, n_wavelengths
+export n_layers, bottom_depth, midpoint_depths, layer_thicknesses
+export uniform_column, fell_column
 
 # Core methods
 export absorption, scattering, backscattering, attenuation, phase_function

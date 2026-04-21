@@ -188,4 +188,20 @@ normalization and moments, layer assembly, inelastic kernels
 
 ## License
 
-[Add license before registering.]
+Apache License, Version 2.0 — see [`LICENSE`](LICENSE). Matches the
+sibling packages in the RemoteSensingTools ecosystem
+(`vSmartMOM.jl`, `CanopyOptics.jl`).
+
+### Third-party reference data
+
+Bundled reference tables in `data/` retain their upstream licenses:
+
+- `pope_fry_1997.csv`, `smith_baker_1981.csv` — public-domain data
+  re-hosted by OMLC.
+- `bricaud_1998_A.csv`, `bricaud_1998_E.csv`, `petzold_sdh.csv` —
+  redistributed from the Ocean Optics Web Book (Mobley, ongoing)
+  under a Creative Commons Attribution license; cite the original
+  papers (Bricaud et al. 1998, Morrison & Nelson 2004, Vasilkov et
+  al. 2005, Petzold 1972, Mobley 1994) in derived work.
+- `pegau_1997_temperature.csv` — digitized from Pegau, Gray &
+  Zaneveld (1997) Appl. Opt. 36, 6035.
