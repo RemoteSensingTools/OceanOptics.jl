@@ -16,6 +16,7 @@ makedocs(
         "Home"                 => "index.md",
         "End-to-end example"   => "example.md",
         "Consumer API"         => "consumer_api.md",
+        "vSmartMOM integration audit" => "vsmartmom_integration.md",
         "Reference"            => [
             "Types"            => "reference/types.md",
             "Materials"        => "reference/materials.md",
