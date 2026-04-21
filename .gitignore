@@ -1,0 +1,21 @@
+# Julia
+/Manifest.toml
+/docs/build/
+/docs/site/
+
+# Coverage
+*.cov
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Google Drive sync artefacts (this working copy lives under Drive)
+.tmp.drivedownload/
+*.icloud

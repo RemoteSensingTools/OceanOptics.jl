@@ -1,0 +1,28 @@
+# Dataset:      Temperature derivative of pure-water absorption, ∂a/∂T
+# Source:       W. S. Pegau, D. Gray and J. R. V. Zaneveld (1997), "Absorption
+#               and attenuation of visible and near-infrared light in water:
+#               dependence on temperature and salinity,"
+#               Appl. Opt. 36, 6035-6046.
+# DOI:          10.1364/AO.36.006035
+# Provenance:   Values digitized from Pegau et al. (1997) Table 2 /
+#               Figure 3 by the package author. Consult the paper for the
+#               authoritative measurements; this table is a condensed
+#               interpolation sufficient for 600-800 nm RT.
+# Extension:    Sentinel zeros at 0.0 nm and 10 000 nm ensure the
+#               downstream piecewise-linear interpolation returns zero
+#               temperature sensitivity outside the 600-800 nm calibrated
+#               window, removing the need to branch on wavelength at the
+#               call site (DESIGN §12.5, AD transparency).
+# Range:        600-800 nm (sentinels extend to the full visible/NIR range)
+# Units:        lambda_nm [nm], dadT_m_inv_per_C [1/m/°C]
+# Columns:      lambda_nm, dadT_m_inv_per_C
+lambda_nm,dadT_m_inv_per_C
+0.00,0.0
+599.00,0.0
+600.00,0.0001
+650.00,0.0011
+700.00,0.0032
+750.00,0.00081
+800.00,0.00009
+801.00,0.0
+10000.00,0.0

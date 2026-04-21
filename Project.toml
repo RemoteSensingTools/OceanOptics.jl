@@ -1,0 +1,27 @@
+name = "OceanOptics"
+uuid = "81d78f2c-09e7-43ab-88c2-b5d9ea2c354a"
+authors = ["RemoteSensingTools"]
+version = "0.1.0-DEV"
+
+[deps]
+DocStringExtensions = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
+FastGaussQuadrature = "442a2c76-b920-505d-bb47-c5924d526838"
+Interpolations = "a98d9a8b-a2ab-59e6-89dd-64a1c18fca59"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+QuadGK = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
+
+[compat]
+DocStringExtensions = "0.9"
+FastGaussQuadrature = "1"
+Interpolations = "0.14, 0.15"
+Printf = "1"
+QuadGK = "2"
+julia = "1.9"
+
+[extras]
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["ForwardDiff", "Test"]
