@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Gallery · OceanOptics.jl</title><meta name="title" content="Gallery · OceanOptics.jl"/><meta property="og:title" content="Gallery · OceanOptics.jl"/><meta property="twitter:title" content="Gallery · OceanOptics.jl"/><meta name="description" content="Documentation for OceanOptics.jl."/><meta property="og:description" content="Documentation for OceanOptics.jl."/><meta property="twitter:description" content="Documentation for OceanOptics.jl."/><meta property="og:url" content="https://RemoteSensingTools.github.io/OceanOptics.jl/gallery/"/><meta property="twitter:url" content="https://RemoteSensingTools.github.io/OceanOptics.jl/gallery/"/><link rel="canonical" href="https://RemoteSensingTools.github.io/OceanOptics.jl/gallery/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">OceanOptics.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><a class="tocitem" href="../example/">End-to-end example</a></li><li class="is-active"><a class="tocitem" href>Gallery</a><ul class="internal"><li><a class="tocitem" href="#1.-Pure-water-absorption,-a_w(λ)"><span>1. Pure-water absorption, <code>a_w(λ)</code></span></a></li><li><a class="tocitem" href="#2.-Pure-water-scattering-—-Morel-(1974)-vs-Zhang-Hu-(2009)"><span>2. Pure-water scattering — Morel (1974) vs Zhang-Hu (2009)</span></a></li><li><a class="tocitem" href="#3.-Case-1-water-IOPs-at-varying-chlorophyll"><span>3. Case-1 water IOPs at varying chlorophyll</span></a></li><li><a class="tocitem" href="#4.-Layer-optics-τ,-ϖ,-B-for-a-5-m-Case-1-layer"><span>4. Layer optics <code>τ, ϖ, B</code> for a 5-m Case-1 layer</span></a></li><li><a class="tocitem" href="#5.-Phase-function-comparison-—-Fournier-Forand-vs-Henyey-Greenstein-vs-Rayleigh-water"><span>5. Phase-function comparison — Fournier-Forand vs Henyey-Greenstein vs Rayleigh-water</span></a></li><li><a class="tocitem" href="#6.-Chlorophyll-fluorescence-emission-spectrum"><span>6. Chlorophyll fluorescence emission spectrum</span></a></li><li><a class="tocitem" href="#7.-Water-Raman-emission-vs-excitation-wavelength"><span>7. Water Raman emission vs excitation wavelength</span></a></li></ul></li><li><a class="tocitem" href="../consumer_api/">Consumer API</a></li><li><a class="tocitem" href="../vsmartmom_integration/">vSmartMOM integration audit</a></li><li><span class="tocitem">Reference</span><ul><li><a class="tocitem" href="../reference/types/">Types</a></li><li><a class="tocitem" href="../reference/materials/">Materials</a></li><li><a class="tocitem" href="../reference/phases/">Phase functions</a></li><li><a class="tocitem" href="../reference/inelastic/">Inelastic</a></li><li><a class="tocitem" href="../reference/io/">Data loading</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Gallery</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Gallery</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/RemoteSensingTools/OceanOptics.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/RemoteSensingTools/OceanOptics.jl/blob/main/docs/src/gallery.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Gallery"><a class="docs-heading-anchor" href="#Gallery">Gallery</a><a id="Gallery-1"></a><a class="docs-heading-anchor-permalink" href="#Gallery" title="Permalink"></a></h1><p>Visual sanity checks of OceanOptics.jl outputs against the canonical published figures they should reproduce. All plots below are generated at documentation-build time from the actual package code — hit the source buttons on any figure and you&#39;ll see the same <code>@example</code> block that emitted the image.</p><p>Each figure cites the published work it is intended to match. If you spot a qualitative disagreement with one of those references, it is a bug.</p><h2 id="1.-Pure-water-absorption,-a_w(λ)"><a class="docs-heading-anchor" href="#1.-Pure-water-absorption,-a_w(λ)">1. Pure-water absorption, <code>a_w(λ)</code></a><a id="1.-Pure-water-absorption,-a_w(λ)-1"></a><a class="docs-heading-anchor-permalink" href="#1.-Pure-water-absorption,-a_w(λ)" title="Permalink"></a></h2><p>Comparison target: Pope &amp; Fry (1997) Fig. 4 and the consolidated pure-water absorption curve on the Ocean Optics Web Book <a href="https://www.oceanopticsbook.info/view/absorption/absorption-by-pure-sea-water">&quot;Absorption by pure water&quot;</a> page. Expect a pronounced minimum around 420 nm (≈ 0.005 m⁻¹), a steep rise into the NIR, and the characteristic water-vapor / O–H combination bands producing shoulders near 605 and 740 nm.</p><pre><code class="language-julia hljs">λ = collect(350.0:2.0:800.0)
+
+w_popefry  = PureWater{Float64}(absorption_model = PopeFry1997())
+w_smithb   = PureWater{Float64}(absorption_model = SmithBaker1981())
+w_combined = PureWater{Float64}(absorption_model = CombinedPopeFryMason())
+
+a_pf = [absorption(w_popefry,  λi) for λi in λ]
+a_sb = [absorption(w_smithb,   λi) for λi in λ]
+a_co = [absorption(w_combined, λi) for λi in λ]
+
+plot(λ, a_pf; label = &quot;Pope &amp; Fry 1997&quot;,      yscale = :log10,
+     xlabel = &quot;wavelength λ [nm]&quot;, ylabel = &quot;a_w(λ) [m⁻¹]&quot;,
+     title  = &quot;Pure-water absorption&quot;)
+plot!(λ, a_sb; label = &quot;Smith &amp; Baker 1981&quot;,  linestyle = :dash)
+plot!(λ, a_co; label = &quot;Combined (piecewise)&quot;, linestyle = :dot)</code></pre><img src="f8034bd3.svg" alt="Example block output"/><h2 id="2.-Pure-water-scattering-—-Morel-(1974)-vs-Zhang-Hu-(2009)"><a class="docs-heading-anchor" href="#2.-Pure-water-scattering-—-Morel-(1974)-vs-Zhang-Hu-(2009)">2. Pure-water scattering — Morel (1974) vs Zhang-Hu (2009)</a><a id="2.-Pure-water-scattering-—-Morel-(1974)-vs-Zhang-Hu-(2009)-1"></a><a class="docs-heading-anchor-permalink" href="#2.-Pure-water-scattering-—-Morel-(1974)-vs-Zhang-Hu-(2009)" title="Permalink"></a></h2><p>Comparison target: Zhang, Hu &amp; He (2009) Fig. 3 (seawater at S = 38.4 ‰, T = 20 °C, 350–700 nm). Zhang-Hu sits 1 % below Morel&#39;s measurements on average across the visible, per the paper&#39;s abstract. Pure-water Morel 1974 overestimates seawater by ~ 30 % because it was calibrated on natural seawater.</p><pre><code class="language-julia hljs">λ = collect(350.0:5.0:700.0)
+
+w_morel   = PureWater{Float64}(scattering_model = Morel1974())
+w_zhh_38  = PureWater{Float64}(scattering_model = ZhangHu2009(),
+                               salinity = 38.4, temperature = 20.0)
+w_zhh_00  = PureWater{Float64}(scattering_model = ZhangHu2009(),
+                               salinity = 0.0,  temperature = 20.0)
+
+b_mo = [scattering(w_morel,  λi) for λi in λ]
+b_zh = [scattering(w_zhh_38, λi) for λi in λ]
+b_zp = [scattering(w_zhh_00, λi) for λi in λ]
+
+plot(λ, b_mo; label = &quot;Morel 1974&quot;,               yscale = :log10,
+     xlabel = &quot;wavelength λ [nm]&quot;, ylabel = &quot;b_w(λ) [m⁻¹]&quot;,
+     title  = &quot;Pure (sea)water scattering&quot;)
+plot!(λ, b_zh; label = &quot;Zhang-Hu 2009, S=38.4&quot;)
+plot!(λ, b_zp; label = &quot;Zhang-Hu 2009, S=0 (pure)&quot;, linestyle = :dash)</code></pre><img src="58155c90.svg" alt="Example block output"/><h2 id="3.-Case-1-water-IOPs-at-varying-chlorophyll"><a class="docs-heading-anchor" href="#3.-Case-1-water-IOPs-at-varying-chlorophyll">3. Case-1 water IOPs at varying chlorophyll</a><a id="3.-Case-1-water-IOPs-at-varying-chlorophyll-1"></a><a class="docs-heading-anchor-permalink" href="#3.-Case-1-water-IOPs-at-varying-chlorophyll" title="Permalink"></a></h2><p>Comparison target: Morel &amp; Maritorena (2001) Fig. 8 (total absorption and scattering of Case-1 water versus chlorophyll) and IOCCG Report 5 §2.4. At 440 nm, higher Chl produces both higher total absorption (more <code>a_φ</code>) and higher particulate scattering <code>b_p</code>, with the classical greening of <code>a(λ)</code> away from the pure-water blue minimum.</p><pre><code class="language-julia hljs">λ   = collect(400.0:2.0:700.0)
+Chls = (0.03, 0.1, 0.3, 1.0, 3.0)
+
+water = PureWater{Float64}()           # CombinedPopeFryMason + Zhang-Hu
+cdom  = CDOM{Float64}(a_ref = 0.03)
+
+function total_a(phyto)
+    return [absorption(water, λi) + absorption(cdom, λi) + absorption(phyto, λi)
+            for λi in λ]
+end
+function total_b(phyto)
+    return [scattering(water, λi) + scattering(phyto, λi) for λi in λ]
+end
+
+pa = plot(xlabel = &quot;wavelength λ [nm]&quot;, ylabel = &quot;a(λ) [m⁻¹]&quot;,
+          title  = &quot;Total absorption a = a_w + a_g + a_φ&quot;,
+          yscale = :log10)
+pb = plot(xlabel = &quot;wavelength λ [nm]&quot;, ylabel = &quot;b(λ) [m⁻¹]&quot;,
+          title  = &quot;Total scattering b = b_w + b_p&quot;,
+          yscale = :log10)
+for Chl in Chls
+    phyto = Phytoplankton{Float64, Bricaud1998}(Chl = Chl)
+    plot!(pa, λ, total_a(phyto); label = &quot;Chl = $Chl&quot;)
+    plot!(pb, λ, total_b(phyto); label = &quot;Chl = $Chl&quot;)
+end
+plot(pa, pb; layout = (1, 2), size = (960, 420))</code></pre><img src="eb846e66.svg" alt="Example block output"/><h2 id="4.-Layer-optics-τ,-ϖ,-B-for-a-5-m-Case-1-layer"><a class="docs-heading-anchor" href="#4.-Layer-optics-τ,-ϖ,-B-for-a-5-m-Case-1-layer">4. Layer optics <code>τ, ϖ, B</code> for a 5-m Case-1 layer</a><a id="4.-Layer-optics-τ,-ϖ,-B-for-a-5-m-Case-1-layer-1"></a><a class="docs-heading-anchor-permalink" href="#4.-Layer-optics-τ,-ϖ,-B-for-a-5-m-Case-1-layer" title="Permalink"></a></h2><p>Comparison target: typical HydroLight / Mobley &quot;clear ocean&quot; reference output, e.g. Mobley (1994) Table 4.2 and the Ocean Optics Web Book Case-1 water IOP reference pages. At <code>Chl = 0.5 mg/m³</code> the single-scattering albedo <code>ϖ(λ)</code> should peak near 500 nm (minimum water absorption combined with non-negligible particulate scattering) and fall toward the red as water absorption takes over.</p><pre><code class="language-julia hljs">λ     = collect(400.0:5.0:700.0)
+water = PureWater{Float64}()
+cdom  = CDOM{Float64}(a_ref = 0.03)
+phyto = Phytoplankton{Float64, Bricaud1998}(Chl = 0.5)
+layer = OceanLayer(0.0, 5.0,
+                   AbstractOceanConstituent{Float64}[water, cdom, phyto])
+opt   = layer_optics(layer, λ; ℓ_max = 32)
+
+pτ = plot(opt.λ, opt.τ; label = false,
+          xlabel = &quot;λ [nm]&quot;, ylabel = &quot;τ(λ)&quot;,
+          title  = &quot;Layer optical depth&quot;)
+pϖ = plot(opt.λ, opt.ϖ; label = false,
+          xlabel = &quot;λ [nm]&quot;, ylabel = &quot;ϖ(λ)&quot;,
+          title  = &quot;Single-scattering albedo&quot;)
+pB = plot(opt.λ, opt.B; label = false,
+          xlabel = &quot;λ [nm]&quot;, ylabel = &quot;B(λ)&quot;,
+          title  = &quot;Backscatter fraction&quot;)
+plot(pτ, pϖ, pB; layout = (1, 3), size = (1040, 320))</code></pre><img src="70a74025.svg" alt="Example block output"/><h2 id="5.-Phase-function-comparison-—-Fournier-Forand-vs-Henyey-Greenstein-vs-Rayleigh-water"><a class="docs-heading-anchor" href="#5.-Phase-function-comparison-—-Fournier-Forand-vs-Henyey-Greenstein-vs-Rayleigh-water">5. Phase-function comparison — Fournier-Forand vs Henyey-Greenstein vs Rayleigh-water</a><a id="5.-Phase-function-comparison-—-Fournier-Forand-vs-Henyey-Greenstein-vs-Rayleigh-water-1"></a><a class="docs-heading-anchor-permalink" href="#5.-Phase-function-comparison-—-Fournier-Forand-vs-Henyey-Greenstein-vs-Rayleigh-water" title="Permalink"></a></h2><p>Comparison target: Mobley, Sundman &amp; Boss (2002) Fig. 1 (Fournier- Forand at several backscatter fractions vs. Petzold) and Hansen &amp; Travis (1974) Fig. 7 for the Rayleigh-with-depolarization shape. Fournier-Forand should be strongly forward-peaked and fall off faster than Henyey-Greenstein at intermediate angles; pure Rayleigh is symmetric forward / back with a p(90°) minimum.</p><pre><code class="language-julia hljs">μ   = collect(-1.0:0.01:1.0)
+
+pf_ff   = FournierForandPhase{Float64}(backscatter_fraction = 0.018)
+pf_hg95 = HenyeyGreensteinPhase{Float64}(g = 0.95)
+pf_hg50 = HenyeyGreensteinPhase{Float64}(g = 0.50)
+pf_ray  = RayleighWaterPhase{Float64}(depolarization = 0.039)
+
+ff   = [phase_function_value(pf_ff,   μi) for μi in μ]
+hg95 = [phase_function_value(pf_hg95, μi) for μi in μ]
+hg50 = [phase_function_value(pf_hg50, μi) for μi in μ]
+ray  = [phase_function_value(pf_ray,  μi) for μi in μ]
+
+θ_deg = rad2deg.(acos.(μ))
+plot(θ_deg, ff;   label = &quot;Fournier-Forand, B = 0.018&quot;, yscale = :log10,
+     xlabel = &quot;scattering angle θ [deg]&quot;,
+     ylabel = &quot;p(θ)&quot;,
+     title  = &quot;Phase functions for ocean scattering&quot;)
+plot!(θ_deg, hg95; label = &quot;Henyey-Greenstein, g = 0.95&quot;)
+plot!(θ_deg, hg50; label = &quot;Henyey-Greenstein, g = 0.50&quot;)
+plot!(θ_deg, ray;  label = &quot;Rayleigh-water, ρ = 0.039&quot;)</code></pre><img src="837ab9aa.svg" alt="Example block output"/><h2 id="6.-Chlorophyll-fluorescence-emission-spectrum"><a class="docs-heading-anchor" href="#6.-Chlorophyll-fluorescence-emission-spectrum">6. Chlorophyll fluorescence emission spectrum</a><a id="6.-Chlorophyll-fluorescence-emission-spectrum-1"></a><a class="docs-heading-anchor-permalink" href="#6.-Chlorophyll-fluorescence-emission-spectrum" title="Permalink"></a></h2><p>Comparison target: Fell (1997) Fig. 5.5 and Gordon (1979) — Gaussian emission band centred at 685 nm with σ = 10.6 nm (FWHM ≈ 25 nm). The band is excitation-independent in the 400–700 nm PAR window, so the shape does not shift with <code>λ&#39;</code>.</p><pre><code class="language-julia hljs">phyto = Phytoplankton{Float64, Bricaud1998}(Chl = 0.5)
+sif   = chlorophyll_fluorescence(phyto)
+
+λ_emit = collect(640.0:1.0:740.0)
+f_exc  = Dict(
+    &quot;λ&#39; = 400 nm&quot; =&gt; [emission(sif, 400.0, λ) for λ in λ_emit],
+    &quot;λ&#39; = 500 nm&quot; =&gt; [emission(sif, 500.0, λ) for λ in λ_emit],
+    &quot;λ&#39; = 600 nm&quot; =&gt; [emission(sif, 600.0, λ) for λ in λ_emit],
+)
+
+plot(xlabel = &quot;emission wavelength λ [nm]&quot;,
+     ylabel = &quot;f(λ&#39;, λ) [nm⁻¹]&quot;,
+     title  = &quot;Chlorophyll fluorescence emission (Fell 1997, Fig. 5.5)&quot;)
+for (lab, y) in f_exc
+    plot!(λ_emit, y; label = lab)
+end
+vline!([685.0]; label = &quot;peak = 685 nm&quot;, linestyle = :dash, color = :gray)</code></pre><img src="268ee98e.svg" alt="Example block output"/><h2 id="7.-Water-Raman-emission-vs-excitation-wavelength"><a class="docs-heading-anchor" href="#7.-Water-Raman-emission-vs-excitation-wavelength">7. Water Raman emission vs excitation wavelength</a><a id="7.-Water-Raman-emission-vs-excitation-wavelength-1"></a><a class="docs-heading-anchor-permalink" href="#7.-Water-Raman-emission-vs-excitation-wavelength" title="Permalink"></a></h2><p>Comparison target: Haltrin &amp; Kattawar (1991) and Bartlett et al. (1998) — a Stokes-shifted Gaussian emission in wavenumber (fixed <code>Δν ≈ 3400 cm⁻¹</code>) that maps onto a variable-width band in wavelength. Excitation at 440 nm produces an emission peak at ≈ 517 nm; at 550 nm the peak is at ≈ 673 nm.</p><pre><code class="language-julia hljs">ram = WaterRaman{Float64}()
+
+λ_emit = collect(430.0:1.0:720.0)
+λ_excs = (400.0, 440.0, 500.0, 550.0)
+
+plot(xlabel = &quot;emission wavelength λ [nm]&quot;,
+     ylabel = &quot;f_R(λ&#39;, λ) [nm⁻¹]&quot;,
+     title  = &quot;Water Raman emission — Stokes shift = 3400 cm⁻¹&quot;)
+for λ′ in λ_excs
+    f  = [emission(ram, λ′, λ) for λ in λ_emit]
+    λp = raman_peak_wavelength(ram, λ′)
+    plot!(λ_emit, f; label = &quot;λ&#39; = $(Int(round(λ′))) nm (peak $(round(λp; digits=0)) nm)&quot;)
+end</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../example/">« End-to-end example</a><a class="docs-footer-nextpage" href="../consumer_api/">Consumer API »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Tuesday 21 April 2026 19:08">Tuesday 21 April 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
