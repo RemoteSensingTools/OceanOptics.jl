@@ -104,7 +104,6 @@ export phase_function_value, phase_function_moments
 export backscatter_fraction, asymmetry_parameter
 export single_scattering_albedo
 export layer_optics, mix_phase_moments
-export to_core_scattering_properties
 
 # Data loading (power-user API)
 export SpectralTable, linterp, data_path, load_spectral_csv

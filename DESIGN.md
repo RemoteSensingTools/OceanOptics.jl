@@ -110,12 +110,13 @@ stable interface the package can produce that every plane-parallel
 ocean RT solver (vSmartMOM, HydroLight, OSOAA, Monte-Carlo codes)
 can consume. The package itself contains no RT solver.
 
-The vSmartMOM-specific adapter (`to_core_scattering_properties`,
-building `CoreScatteringOpticalProperties` with Z matrices) lives in
-a **package extension** (`ext/OceanOpticsVSmartMOMExt`), not in the
-main source tree. This mirrors how Julia packages like DiffEq handle
-optional solver backends, and ensures OceanOptics.jl can be
-installed and tested without vSmartMOM.
+Translation from `OceanLayerOptics` into a specific solver's internal
+representation — vSmartMOM's `CoreScatteringOpticalProperties` with
+`Z`-matrices, HydroLight's tabular I/O, a Monte-Carlo code's
+per-photon sampler — happens on the *solver* side. This matches the
+CanopyOptics.jl / vSmartMOM precedent: the data package has zero
+knowledge of which consumer imports it, and `Project.toml` lists no
+solver packages under `[deps]` or `[weakdeps]`.
 
 ### 3.2 Multiple dispatch on three orthogonal axes
 
@@ -366,17 +367,19 @@ uniform_column(constituents; n_layers=10, depth=50.0) -> OceanColumn
            ▼
      OceanLayerOptics{FT}
            │
-           │  OceanOpticsVSmartMOMExt.to_core_scattering_properties(opt)
+           │  (solver-side, not in this repo)
+           │  vSmartMOM builds CoreScatteringOpticalProperties from β:
            │     Z⁺⁺, Z⁻⁺ = vSmartMOM.Scattering.compute_Z_matrices(
            │                   β, quad_points, pol_type)
            ▼
      vSmartMOM.CoreRT.CoreScatteringOpticalProperties
 ```
 
-Every arrow in this diagram is a function call; every box is a
+Every arrow inside this repo is a function call; every box is a
 value. No hidden state, no mutable workspaces, no implicit
-initialization. The full forward path is side-effect-free up to the
-Z-matrix computation (which lives in vSmartMOM).
+initialization. The full forward path is side-effect-free through
+`OceanLayerOptics`; the Z-matrix and solver-specific packing steps
+happen on the consumer side (see §3.1).
 
 ---
 
@@ -491,16 +494,19 @@ populated by a function patterned on
 ### 7.3 The adapter pattern
 
 ```julia
-# In OceanOptics.jl proper (pure; no vSmartMOM dependency)
+# In OceanOptics.jl (data-producer, RT-solver-neutral)
 struct IsotropicFluorescence{FT, A, E} <: AbstractOceanInelasticProcess{FT}
-    ...
+    absorber::A
+    emission::E
+    quantum_yield::FT
+    excitation_range::Tuple{FT, FT}
 end
 
-# In OceanOpticsVSmartMOMExt package extension
+# In vSmartMOM.jl (consumer)
 function getOceanInelasticProp!(RS_type::OceanRS{FT},
-                                 processes::Vector{<:AbstractOceanInelasticProcess},
-                                 layer::OceanLayer,
-                                 λ_grid::AbstractVector{FT}) where {FT}
+                                processes::Vector{<:AbstractOceanInelasticProcess},
+                                layer::OceanLayer,
+                                λ_grid::AbstractVector{FT}) where {FT}
     # Fold each process into ϖ_λ₁λ₀, i_λ₁λ₀, Z_λ₁λ₀ fields of RS_type.
     # Fluorescence: isotropic, δ₁(0, m) → contributes only to m=0.
     # Water Raman: Cabannes phase function with depolarization δ.
@@ -513,6 +519,13 @@ The existing `elemental_inelastic!`, `doubling_inelastic!`,
 `interaction_inelastic!` kernels in
 `vSmartMOM/src/CoreRT/CoreKernel/` consume the populated `OceanRS`
 struct unchanged — zero new kernel code.
+
+Note the direction: `getOceanInelasticProp!` lives in vSmartMOM,
+not here, so that OceanOptics.jl declares no solver dependency
+(see §3.1). The types `IsotropicFluorescence`, `WaterRaman`,
+`CDOMFluorescence` and their `excitation_absorption` /
+`emission` / `excitation_range` / `is_isotropic` kernel trait
+functions are the stable public API vSmartMOM consumes.
 
 ### 7.4 Two-pass solve
 
@@ -716,13 +729,9 @@ OceanOptics.jl/
 │   └── io/
 │       └── data_loaders.jl     # parse OMLC txt, Bricaud csv, etc.
 │
-├── ext/
-│   ├── OceanOpticsVSmartMOMExt/
-│   │   ├── to_core_scattering.jl     # adapter for elastic path
-│   │   ├── ocean_rs.jl               # OceanRS <: AbstractRamanType
-│   │   └── get_ocean_inelastic.jl    # populates OceanRS
-│   └── OceanOpticsUnitfulExt/        # optional; for u"nm" wavelength grids
-│       └── unitful_wrappers.jl
+├── ext/                              # optional, non-solver extensions only
+│   └── (future: OceanOpticsUnitfulExt/unitful_wrappers.jl
+│        for u"nm" wavelength grids)
 │
 ├── data/
 │   ├── pope_fry_1997.csv
@@ -740,10 +749,12 @@ OceanOptics.jl/
     └── test_vsmartmom_integration.jl   # runs only if vSmartMOM loadable
 ```
 
-The `ext/` directory uses Julia's (≥ 1.9) package-extension system.
-Loading vSmartMOM will auto-activate the extension; without
-vSmartMOM the core package works standalone. Same pattern for
-Unitful wavelength-grid support.
+The `ext/` directory is reserved for non-solver convenience
+extensions (Unitful wavelength-grid support is the obvious
+candidate). RT-solver integrations — vSmartMOM's `OceanSurface`,
+`OceanRS`, `CoreScatteringOpticalProperties` adapter — live in
+the *solver* package, not here, per the CanopyOptics.jl pattern
+discussed in §3.1.
 
 ---
 
@@ -786,10 +797,17 @@ vSmartMOM extension.
 ### Phase 3 — coupled RT in vSmartMOM
 
 `OceanSurface <: AbstractSurfaceType` with adding-doubling through
-ocean sub-layers, Fresnel interface coupling. This work lives in
-vSmartMOM, not OceanOptics.jl, but drives Phase 1 and 2
-requirements. See `vSmartMOM/docs/dev_notes/ocean.md` for the
-detailed plan.
+ocean sub-layers, Fresnel interface coupling, plus the
+`OceanRS <: AbstractRamanType` adapter, plus the
+`CoreScatteringOpticalProperties` builder from an `OceanLayerOptics`.
+**All of this lives in vSmartMOM.jl, not in OceanOptics.jl** (see
+§3.1 for the rationale). From this repo's perspective Phase 3 is a
+no-op — the contract to honor is keeping `OceanLayerOptics`, the
+`AbstractOceanInelasticProcess` kernel traits, and the
+`AbstractOceanConstituent` hierarchy stable so the solver side can
+code against them without churn. See
+`vSmartMOM/docs/dev_notes/ocean.md` for the detailed solver-side
+plan.
 
 ### Phase 4 — polish
 

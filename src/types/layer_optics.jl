@@ -23,9 +23,8 @@ for scalar RT only `β` is meaningful and the others may be empty / absent.
 # Fourier / Greek coefficients
 
 Arrays are indexed `[ℓ, λ]` where `ℓ = 0:ℓ_max` and `λ` runs over the
-wavelength grid. This layout matches vSmartMOM's `GreekCoefs` and, by
-contracts elsewhere in the package, is what `to_core_scattering_properties`
-hands off.
+wavelength grid. This layout matches vSmartMOM's `GreekCoefs` so a
+solver-side adapter can hand it off without re-layout.
 """
 struct OceanLayerOptics{FT, V<:AbstractVector{FT}, M<:AbstractMatrix{FT}}
     "Wavelength grid `[nm]`"

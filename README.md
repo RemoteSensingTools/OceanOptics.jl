@@ -79,6 +79,34 @@ opt.β        # Legendre moments β_ℓ(λ)       Matrix (ℓ_max+1, nλ)
 ocean RT code (vSmartMOM, HydroLight-style ODE, Monte Carlo, SOS) can
 consume the same output.
 
+## Consumer API (what an RT solver consumes)
+
+OceanOptics.jl publishes a stable, RT-agnostic interface. Downstream
+solvers (vSmartMOM, HydroLight-style ODE codes, Monte-Carlo,
+SOS, …) consume it *without* OceanOptics having any knowledge of
+the solver. `Project.toml` therefore lists no RT-solver package
+under `[deps]` or `[weakdeps]`; adapters live on the solver side.
+
+The stable contract is:
+
+* **`OceanLayerOptics{FT}`** — per-layer bundle with fields `λ`
+  (`[nm]`), `Δz` (`[m]`), `τ`, `ϖ`, `B`, and `β` (Legendre moments,
+  indexed `[ℓ+1, λ]`). Optional polarized Greek elements α, γ, δ,
+  ε, ζ follow the same `[ℓ+1, λ]` layout when populated.
+* **`layer_optics(layer::OceanLayer, λ_grid; ℓ_max)`** — the
+  single entry point that produces an `OceanLayerOptics` from a
+  biogeochemical state.
+* **`AbstractOceanInelasticProcess{FT}`** hierarchy and its trait
+  functions `excitation_absorption(p, λ')`, `emission(p, λ', λ)`,
+  `excitation_range(p)`, `is_isotropic(p)`,
+  `inelastic_coefficient(p, λ', λ)` (DESIGN §7.1). These are the
+  Fell (1997) factorization kernels a two-pass RT solver multiplies
+  against its pass-1 scalar irradiance `E°(τ, λ')`.
+* **`OceanLayer{FT}.fluorophores::Vector{<:AbstractOceanInelasticProcess{FT}}`**
+  — per-layer list of active inelastic processes.
+
+Any API surface outside the above list is internal and may change.
+
 ## Automatic differentiation
 
 Every forward function on the elastic path is AD-transparent via
