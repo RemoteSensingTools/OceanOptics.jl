@@ -61,7 +61,7 @@
 
     @testset "OceanLayer with fluorophores (Phase 2)" begin
         cdom  = CDOM{Float64}(a_ref = 0.1)
-        phyto = Phytoplankton{Float64, Bricaud1995}(Chl = 0.5)
+        phyto = Phytoplankton{Float64, Bricaud1998}(Chl = 0.5)
         sif   = chlorophyll_fluorescence(phyto)
         ram   = WaterRaman{Float64}()
 

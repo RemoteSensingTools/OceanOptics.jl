@@ -88,7 +88,7 @@ export PureWater
 export AbstractPureWaterAbsorptionModel, SmithBaker1981, PopeFry1997, MasonConeFry2016, CombinedPopeFryMason
 export AbstractPureWaterScatteringModel, Morel1974, ZhangHu2009
 export CDOM, AbstractCDOMModel, BricaudMorelPrieur1981
-export Phytoplankton, AbstractPhytoplanktonModel, Bricaud1995, Gordon1992
+export Phytoplankton, AbstractPhytoplanktonModel, Bricaud1998, Gordon1992
 export NonAlgalParticles, AbstractNAPModel, BabinBricaud2003, FellMineral
 
 # Phase functions

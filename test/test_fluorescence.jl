@@ -37,7 +37,7 @@
     end
 
     @testset "chlorophyll_fluorescence: Fell (1997) parameterization" begin
-        phyto = Phytoplankton{Float64, Bricaud1995}(Chl = 0.5)
+        phyto = Phytoplankton{Float64, Bricaud1998}(Chl = 0.5)
         sif   = chlorophyll_fluorescence(phyto)
 
         # Type-parameter plumbing
@@ -57,8 +57,10 @@
         @test f_peak > 0
         @test f_half ≈ f_peak / 2 rtol=1e-10
 
-        # excitation_absorption errors because Bricaud data not bundled
-        @test_throws ErrorException excitation_absorption(sif, 440.0)
+        # excitation_absorption now works with the Bricaud 1998 data bundled.
+        # a^I(λ') = φ · a_absorber(λ'), so positive and much smaller than a_φ.
+        a_phyto = absorption(phyto, 440.0)
+        @test excitation_absorption(sif, 440.0) ≈ 0.003 * a_phyto rtol=1e-12
 
         # Custom parameterization
         sif_ens = chlorophyll_fluorescence(phyto;

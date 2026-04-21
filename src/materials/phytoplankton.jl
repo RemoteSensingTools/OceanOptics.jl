@@ -4,15 +4,18 @@
 #
 # The phytoplankton absorption spectrum a_φ(λ) is the single biggest
 # moving piece of ocean optics in the visible. The canonical empirical
-# parameterization is Bricaud et al. (1995, 1998):
+# parameterization is Bricaud's power-law:
 #
 #     a_φ*(λ) = A(λ) · Chl^(-E(λ))    [m²/mg]
 #     a_φ(λ)  = a_φ*(λ) · Chl         [1/m]
 #
-# where `A(λ)` and `E(λ)` are 1 nm-resolution spectra obtained by fitting
-# 815 globally distributed HPLC+spectrophotometer samples (Bricaud,
-# Babin, Morel, Claustre 1995, JGR 100, 13321; extension in Bricaud,
-# Morel, Babin, Allali, Claustre 1998, JGR 103, 31033).
+# where `A(λ)` and `E(λ)` are spectral coefficients fit to globally
+# distributed HPLC + spectrophotometer samples. Two generations ship:
+# the original Bricaud et al. 1995 JGR fit (visible only; NOT bundled),
+# and the 1998 update (Bricaud, Morel, Babin, Allali, Claustre JGR 103,
+# 31033) extended to UV by Morrison & Nelson (2004) and Vasilkov et al.
+# (2005). The 1998 update is the community-standard replacement and is
+# the version bundled here as `data/bricaud_1998_{A,E}.csv`.
 #
 # Particulate scattering uses the Morel & Maritorena (2001, JGR 106,
 # 7163) Case-1 form:
@@ -21,23 +24,17 @@
 #
 # The angular distribution is Fournier-Forand with a typical open-ocean
 # backscatter fraction B ≈ 0.01; the caller can override at construction.
-#
-# Data provenance
-# ---------------
-# The Bricaud (1995) A(λ) / E(λ) tables are NOT shipped with this release
-# (they require transcription from JGR 100, 13321 Table 2; see DESIGN §8.3).
-# Drop a two-column CSV `data/bricaud_1995.csv` into place to activate.
-# Columns: `lambda_nm, A_m2_per_mg` and a second file `data/bricaud_1995_E.csv`
-# with `lambda_nm, E`.
 # =============================================================================
 
 """
 $(TYPEDEF)
 
-Bricaud et al. (1995, 1998) power-law phytoplankton absorption. Requires
-the `A(λ)` and `E(λ)` spectral tables from JGR 100, 13321 Table 2.
+Bricaud et al. (1998, JGR 103, 31033) power-law phytoplankton absorption,
+extended to UV by Morrison & Nelson (2004) and Vasilkov et al. (2005).
+Bundled as `data/bricaud_1998_A.csv` and `data/bricaud_1998_E.csv`,
+covering 300–1000 nm at 2 nm resolution.
 """
-struct Bricaud1995 <: AbstractPhytoplanktonModel end
+struct Bricaud1998 <: AbstractPhytoplanktonModel end
 
 """
 $(TYPEDEF)
@@ -66,15 +63,15 @@ $(TYPEDFIELDS)
 
 ```julia
 # Open-ocean Case-1 water at Chl = 0.5 mg/m³
-phyto = Phytoplankton{Float64, Bricaud1995}(Chl = 0.5)
+phyto = Phytoplankton{Float64, Bricaud1998}(Chl = 0.5)
 
 # Custom backscatter fraction (coastal, larger cells)
-phyto = Phytoplankton{Float64, Bricaud1995}(Chl = 2.0, B = 0.015)
+phyto = Phytoplankton{Float64, Bricaud1998}(Chl = 2.0, B = 0.015)
 ```
 """
 struct Phytoplankton{FT, M<:AbstractPhytoplanktonModel,
                         P<:AbstractOceanPhaseFunction{FT}} <: AbstractAbsorbingScatterer{FT}
-    "Parameterization-model tag (e.g. `Bricaud1995()`)"
+    "Parameterization-model tag (e.g. `Bricaud1998()`)"
     model::M
     "Chlorophyll-a concentration `[mg/m³]`"
     Chl::FT
@@ -96,50 +93,32 @@ function Phytoplankton{FT, M}(; Chl, B = FT(0.01)) where {FT<:AbstractFloat, M<:
 end
 
 Phytoplankton{FT}(; kwargs...) where {FT<:AbstractFloat} =
-    Phytoplankton{FT, Bricaud1995}(; kwargs...)
+    Phytoplankton{FT, Bricaud1998}(; kwargs...)
 Phytoplankton(; kwargs...) = Phytoplankton{Float64}(; kwargs...)
 
 phase_function(p::Phytoplankton) = p.phase
 
 # -----------------------------------------------------------------------------
-# Absorption — Bricaud (1995)
+# Absorption — Bricaud (1998) + UV extensions
 # -----------------------------------------------------------------------------
 
-const _BRICAUD_1995_A_PATH      = data_path("bricaud_1995_A.csv")
-const _BRICAUD_1995_E_PATH      = data_path("bricaud_1995_E.csv")
-const _BRICAUD_1995_AVAILABLE   = isfile(_BRICAUD_1995_A_PATH) && isfile(_BRICAUD_1995_E_PATH)
-const _BRICAUD_1995_A_CACHE     = Ref{Union{Nothing, SpectralTable{Float64}}}(nothing)
-const _BRICAUD_1995_E_CACHE     = Ref{Union{Nothing, SpectralTable{Float64}}}(nothing)
+"A(λ) spectral pre-factor, Bricaud 1998 + UV extensions, 300–1000 nm."
+const _BRICAUD_1998_A_TABLE = load_spectral_csv(data_path("bricaud_1998_A.csv"))
 
-function _bricaud_1995_tables()
-    A = _BRICAUD_1995_A_CACHE[]
-    E = _BRICAUD_1995_E_CACHE[]
-    (A !== nothing && E !== nothing) && return (A = A, E = E)
-    isfile(_BRICAUD_1995_A_PATH) && isfile(_BRICAUD_1995_E_PATH) || error(
-        "Phytoplankton{Bricaud1995} absorption requires both ",
-        "`data/bricaud_1995_A.csv` and `data/bricaud_1995_E.csv`, which ",
-        "are not bundled with this OceanOptics.jl release. Transcribe ",
-        "Table 2 of Bricaud et al. (1995) JGR 100, 13321 into those ",
-        "paths (see DESIGN §8.3); each file is (lambda_nm, value).")
-    A = load_spectral_csv(_BRICAUD_1995_A_PATH)
-    E = load_spectral_csv(_BRICAUD_1995_E_PATH)
-    _BRICAUD_1995_A_CACHE[] = A
-    _BRICAUD_1995_E_CACHE[] = E
-    return (A = A, E = E)
-end
+"E(λ) spectral exponent, Bricaud 1998 + UV extensions, 300–1000 nm."
+const _BRICAUD_1998_E_TABLE = load_spectral_csv(data_path("bricaud_1998_E.csv"))
 
-function absorption(p::Phytoplankton{FT, Bricaud1995}, λ::Real) where {FT}
-    tbls = _bricaud_1995_tables()
-    # a_φ*(λ) = A(λ) · Chl^{-E(λ)}, a_φ(λ) = a_φ*(λ) · Chl
-    A_λ  = linterp(tbls.A, λ)
-    E_λ  = linterp(tbls.E, λ)
-    return A_λ * p.Chl^(one(FT) - E_λ)    # = A·Chl^(-E)·Chl = A·Chl^(1-E)
+function absorption(p::Phytoplankton{FT, Bricaud1998}, λ::Real) where {FT}
+    # a_φ*(λ) = A(λ) · Chl^{-E(λ)}, a_φ(λ) = a_φ*(λ) · Chl = A · Chl^{1-E}
+    A_λ = linterp(_BRICAUD_1998_A_TABLE, λ)
+    E_λ = linterp(_BRICAUD_1998_E_TABLE, λ)
+    return A_λ * p.Chl^(one(FT) - E_λ)
 end
 
 function absorption(p::Phytoplankton{FT, Gordon1992}, λ::Real) where {FT}
     error("Phytoplankton{Gordon1992} absorption is not yet implemented. ",
-          "Use Phytoplankton{$(nameof(FT)), Bricaud1995} with the Bricaud ",
-          "tables, or wait for a future release.")
+          "Use Phytoplankton{$(nameof(FT)), Bricaud1998} with the bundled ",
+          "Bricaud 1998 + UV-extended tables, or wait for a future release.")
 end
 
 absorption(p::Phytoplankton, λ::AbstractVector) = [absorption(p, λi) for λi in λ]

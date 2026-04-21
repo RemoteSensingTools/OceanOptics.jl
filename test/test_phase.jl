@@ -113,8 +113,14 @@ using QuadGK
         @test all(β_iso[2:end] .≈ 0.0)
     end
 
-    @testset "PetzoldPhase errors helpfully without data" begin
-        # Petzold table not shipped (DESIGN §8.7).
-        @test_throws ErrorException PetzoldPhase{Float64}()
+    @testset "PetzoldPhase (bundled, CC-BY via Ocean Optics Web Book)" begin
+        pf = PetzoldPhase{Float64}()
+        # Normalized: (1/2) ∫₋₁¹ p dμ should equal 1 after the loader's
+        # trapezoid normalization
+        β = phase_function_moments(pf, 8)
+        @test β[1] ≈ 1.0 rtol=5e-2
+
+        # Strongly forward-peaked ocean particulate scattering
+        @test phase_function_value(pf, 0.99) > 50 * phase_function_value(pf, 0.0)
     end
 end

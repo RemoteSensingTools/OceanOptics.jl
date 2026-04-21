@@ -1,0 +1,68 @@
+# Dataset:      Petzold "San Diego Harbor" (turbid-water) volume scattering function
+# Source:       T. J. Petzold (1972), "Volume scattering functions for selected
+#               ocean waters," SIO Ref. 72-78. Scripps Institution of Oceanography.
+# Re-tabulated: C. D. Mobley (1994), "Light and Water: Radiative Transfer in
+#               Natural Waters," Academic Press, Table 3.10 (turbid column).
+# Retrieved:    https://www.oceanopticsbook.info/packages/iws_l2h/conversion/files/Petzold_data.txt
+#               (Ocean Optics Web Book, C. D. Mobley, accessed 2026-04-21)
+# License:      Creative Commons Attribution (Ocean Optics Web Book site-wide).
+# Range:        0.1°–180°, 55 log-spaced scattering angles.
+# Units:        theta_deg [°], beta_inv_m_sr [1/(m·sr)].
+# Measured at:  λ = 514 nm (representative; Petzold originally measured at 514, 530, 633).
+# Columns:      theta_deg, beta_inv_m_sr
+theta_deg,beta_inv_m_sr
+0.100,3.2620e+03
+0.126,2.3970e+03
+0.158,1.7570e+03
+0.200,1.2750e+03
+0.251,9.2600e+02
+0.316,6.7640e+02
+0.398,5.0270e+02
+0.501,3.7050e+02
+0.631,2.6760e+02
+0.794,1.8970e+02
+1.000,1.3290e+02
+1.259,9.1910e+01
+1.585,6.2800e+01
+1.995,4.1710e+01
+2.512,2.7370e+01
+3.162,1.7930e+01
+3.981,1.1720e+01
+5.012,7.6550e+00
+6.310,5.0390e+00
+7.943,3.3020e+00
+10.000,2.1110e+00
+15.000,9.0410e-01
+20.000,4.4520e-01
+25.000,2.7340e-01
+30.000,1.6130e-01
+35.000,1.1090e-01
+40.000,7.9130e-02
+45.000,5.8580e-02
+50.000,4.3880e-02
+55.000,3.2880e-02
+60.000,2.5480e-02
+65.000,2.0410e-02
+70.000,1.6550e-02
+75.000,1.3450e-02
+80.000,1.1240e-02
+85.000,9.6370e-03
+90.000,8.4110e-03
+95.000,7.3960e-03
+100.000,6.6940e-03
+105.000,6.2200e-03
+110.000,5.8910e-03
+115.000,5.7290e-03
+120.000,5.5490e-03
+125.000,5.3430e-03
+130.000,5.1540e-03
+135.000,4.9670e-03
+140.000,4.8220e-03
+145.000,4.6350e-03
+150.000,4.6340e-03
+155.000,4.9000e-03
+160.000,5.1420e-03
+165.000,5.3590e-03
+170.000,5.5500e-03
+175.000,5.6180e-03
+180.000,5.6860e-03

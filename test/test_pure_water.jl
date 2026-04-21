@@ -43,24 +43,33 @@
         @test scattering(w, 700.0) < scattering(w, 500.0)
     end
 
-    @testset "Zhang-Hu (2009) scattering — calibrated approximation" begin
-        # DESIGN §11 target: b_sw(500, S=35, T=20) ≈ 0.00194 1/m (exact by
-        # construction of the calibration — see pure_water.jl _ZHH_*).
+    @testset "Zhang-Hu (2009) scattering — faithful port" begin
+        # Values checked against the Zhang et al. (2009) reference MATLAB
+        # `betasw_ZHH2009.m` (ion-functions mirror). The port replaces the
+        # Phase-1 calibrated approximation, so the numeric targets changed.
         w = PureWater{Float64}(scattering_model = ZhangHu2009(),
                                temperature = 20.0, salinity = 35.0)
-        @test scattering(w, 500.0) ≈ 0.00194 rtol=1e-3
+        @test scattering(w, 500.0) ≈ 0.002547 rtol=1e-3
 
-        # Pure-water limit (S = 0): b_sw collapses to the calibration
-        # constant B₀ = 0.001492 (matches Zhang et al. 2009 pure-water
-        # values at 500 nm to within a couple percent).
+        # Pure-water limit (S = 0): β(90°) reduces to the density-only term.
         w_pure = PureWater{Float64}(scattering_model = ZhangHu2009(),
                                     temperature = 20.0, salinity = 0.0)
-        @test scattering(w_pure, 500.0) ≈ 0.001492 rtol=1e-4
+        @test scattering(w_pure, 500.0) ≈ 0.001958 rtol=1e-3
 
-        # Temperature sensitivity: -0.3% per °C near 20°C
+        # Morel (1966) measurement at 546 nm, S = 38.4 ‰, T = 20 °C — the
+        # paper's Fig. 3 validation point. Agreement is 1 % per the paper.
+        w_morel = PureWater{Float64}(scattering_model = ZhangHu2009(),
+                                     temperature = 20.0, salinity = 38.4)
+        @test scattering(w_morel, 546.0) ≈ 0.001791 rtol=1e-3
+
+        # Temperature sensitivity: scattering decreases with warming near 20 °C
         w_warm = PureWater{Float64}(scattering_model = ZhangHu2009(),
                                     temperature = 30.0, salinity = 35.0)
         @test scattering(w_warm, 500.0) < scattering(w, 500.0)
+
+        # Spectral slope is steeper than Rayleigh λ⁻⁴ at short λ (n(λ)
+        # dispersion); roughly λ⁻⁴·³ per the paper conclusion.
+        @test scattering(w, 400.0) / scattering(w, 700.0) > (700/400)^4.0
     end
 
     @testset "Backscatter: molecular is exactly b/2" begin

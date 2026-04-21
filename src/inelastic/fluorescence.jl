@@ -30,7 +30,7 @@ $(TYPEDFIELDS)
 # Examples
 
 ```julia
-phyto = Phytoplankton{Float64, Bricaud1995}(Chl = 0.5)
+phyto = Phytoplankton{Float64, Bricaud1998}(Chl = 0.5)
 sif   = chlorophyll_fluorescence(phyto)                   # default config
 sif   = IsotropicFluorescence{Float64}(phyto;
             emission        = GaussianEmission{Float64}(center_nm = 685.0,

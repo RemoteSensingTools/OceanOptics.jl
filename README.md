@@ -17,28 +17,34 @@ philosophy, and implementation roadmap live in [`DESIGN.md`](DESIGN.md).
 
 ## Status
 
-**Phase 1 (elastic path, single layer) — under active development.** The
+**Phases 1 (elastic IOPs) and 2 (inelastic kernels) are complete.** The
 current release ships:
 
-- `PureWater` with choice of absorption model (Pope-Fry 1997,
-  Smith-Baker 1981, Mason-Cone-Fry 2016, piecewise combined) and
-  scattering model (Morel 1974, Zhang-Hu-like 2009 calibrated approximation).
+- `PureWater` with choice of absorption model (Pope-Fry 1997, Smith-Baker
+  1981, Mason-Cone-Fry 2016 stub, piecewise combined) and scattering
+  model (Morel 1974 or Zhang-Hu 2009 — the latter a faithful port of the
+  `betasw_ZHH2009.m` reference MATLAB, matching Zhang et al.'s published
+  agreement with Morel measurements to 1 %).
 - `CDOM` (Bricaud, Morel & Prieur 1981 exponential form).
-- `Phytoplankton` with Bricaud (1995) absorption (data-dependent; see
-  [data bundling notes](#data-bundling)) and Morel & Maritorena (2001)
-  Case-1 scattering.
-- `NonAlgalParticles` with both Babin et al. (2003) exponential and
+- `Phytoplankton{Bricaud1998}` — power-law `a_φ*(λ) = A(λ)·Chl^(-E(λ))`
+  with bundled 1998 Bricaud + Morrison-Nelson 2004 + Vasilkov 2005
+  spectra (300–1000 nm), plus Morel & Maritorena 2001 Case-1 scattering.
+- `NonAlgalParticles` with Babin et al. (2003) exponential and
   Fell (1997) mineral parameterizations.
-- Phase functions: `RayleighWaterPhase`, `FournierForandPhase` with
-  Mobley (2002) B→(n,μ_j) inversion and forward-peak renormalization,
+- Phase functions: `RayleighWaterPhase`, `FournierForandPhase`
+  (Mobley 2002 B → n,μ_j inversion + forward-peak renormalization),
   `HenyeyGreensteinPhase` (closed-form moments), and `PetzoldPhase`
-  (data-dependent).
+  (San Diego Harbor VSF from the Ocean Optics Web Book).
 - `layer_optics(layer, λ_grid)` — the main entry point, producing a
   complete `OceanLayerOptics` bundle of τ, ϖ, B, and β_ℓ(λ).
+- `AbstractOceanInelasticProcess` + trait functions for
+  `IsotropicFluorescence`, `CDOMFluorescence`, `WaterRaman`, plus
+  `chlorophyll_fluorescence(phyto)` with Fell (1997) defaults.
 
-Phases 2 (inelastic fluorescence / Raman), 3 (coupled RT through a
-`vSmartMOM.OceanSurface`), and 4 (polarized Greek expansion, artifact
-data loading, JOSS paper) are planned. See DESIGN §10.
+Phase 3 (coupled RT with `OceanSurface <: AbstractSurfaceType`) lives
+in `vSmartMOM.jl`, not here. Phase 4 (polarized Greek-coefficient
+expansion, `OceanColumn` + Fell-grid helper, artifact-based data
+loading, JOSS paper) is the remaining in-repo scope. See DESIGN §10.
 
 ## Install
 
@@ -55,14 +61,12 @@ using OceanOptics
 # Open-ocean Case-1 water, moderate chlorophyll.
 water = PureWater{Float64}(
     absorption_model = CombinedPopeFryMason(),   # HydroLight-style piecewise
-    scattering_model = ZhangHu2009(),            # calibrated approximation
+    scattering_model = ZhangHu2009(),            # faithful ZHH-2009 port
     temperature      = 20.0,
     salinity         = 35.0,
 )
 cdom  = CDOM{Float64}(a_ref = 0.03, λ_ref = 440.0, slope = 0.014)
-# Bricaud 1995 absorption requires the data CSVs (see "Data bundling").
-# Until those are provided, scattering-only phytoplankton still works:
-phyto = Phytoplankton{Float64, Bricaud1995}(Chl = 0.5)
+phyto = Phytoplankton{Float64, Bricaud1998}(Chl = 0.5)
 
 layer = OceanLayer(0.0, 5.0,
     AbstractOceanConstituent{Float64}[water, cdom, phyto])
@@ -73,6 +77,11 @@ opt = layer_optics(layer, λ; ℓ_max = 64)
 opt.τ        # per-λ optical depth           Vector{Float64}
 opt.ϖ        # per-λ single-scattering albedo
 opt.β        # Legendre moments β_ℓ(λ)       Matrix (ℓ_max+1, nλ)
+
+# Inelastic kernels for a downstream two-pass RT solver
+sif = chlorophyll_fluorescence(phyto)          # Fell 1997 defaults
+excitation_absorption(sif, 440.0)              # φ · a_φ(440)
+emission(sif, 440.0, 685.0)                    # 1/nm, ~0.0376
 ```
 
 `OceanLayerOptics` is the RT-solver-neutral interface: any plane-parallel
@@ -130,11 +139,14 @@ Spectral reference tables live in `data/` as provenance-commented CSVs.
 Every file records its upstream citation, DOI, URL, retrieval date, and
 any unit conversion applied at load time (DESIGN §3.4). Currently bundled:
 
-| File                           | Source                          | What                                      |
-| ------------------------------ | ------------------------------- | ----------------------------------------- |
-| `pope_fry_1997.csv`            | omlc.org                        | Pure water absorption, 380–727.5 nm       |
-| `smith_baker_1981.csv`         | omlc.org                        | Pure water absorption, 200–800 nm         |
-| `pegau_1997_temperature.csv`   | Pegau et al. 1997, digitized    | Temperature derivative ∂a/∂T, 600–800 nm  |
+| File                           | Source (license)                             | What                                      |
+| ------------------------------ | -------------------------------------------- | ----------------------------------------- |
+| `pope_fry_1997.csv`            | omlc.org (public)                            | Pure water absorption, 380–727.5 nm       |
+| `smith_baker_1981.csv`         | omlc.org (public)                            | Pure water absorption, 200–800 nm         |
+| `pegau_1997_temperature.csv`   | Pegau et al. 1997, digitized                 | Temperature derivative ∂a/∂T, 600–800 nm  |
+| `bricaud_1998_A.csv`           | Ocean Optics Web Book (CC-BY), Bricaud 1998 + Morrison & Nelson 2004 + Vasilkov 2005 | Phytoplankton `A(λ)`, 300–1000 nm |
+| `bricaud_1998_E.csv`           | Ocean Optics Web Book (CC-BY), Bricaud 1998 + UV extensions | Phytoplankton `E(λ)`, 300–1000 nm |
+| `petzold_sdh.csv`              | Ocean Optics Web Book (CC-BY) / Mobley 1994 Table 3.10 | Petzold "San Diego Harbor" VSF, 0.1°–180° |
 
 Re-fetch from upstream at any time with:
 
@@ -142,18 +154,19 @@ Re-fetch from upstream at any time with:
 julia --project=. scripts/fetch_data.jl
 ```
 
-### Not yet bundled (transcription required)
+### Still stubbed (paywalled sources)
 
-- `mason_cone_fry_2016.csv` — UV extension, Appl. Opt. 55, 7163 Table 2.
-- `bricaud_1995_A.csv`, `bricaud_1995_E.csv` — phytoplankton `A(λ)` and
-  `E(λ)` spectra, JGR 100, 13321 Table 2.
-- `petzold_sdh.csv` — Petzold "San Diego Harbor" VSF, Mobley (1994)
-  *Light and Water* Appendix A.4.
+- `mason_cone_fry_2016.csv` — UV-extension to the Pope-Fry table,
+  Appl. Opt. 55, 7163 Table 2. No redistributable source found.
+  Selecting `MasonConeFry2016` raises a helpful error pointing you at
+  the paper; drop a transcribed CSV into `data/` to activate.
+  `CombinedPopeFryMason` falls back to Smith-Baker below 380 nm in the
+  meantime.
 
-Selecting a model that depends on one of these files (e.g.
-`MasonConeFry2016`, `Phytoplankton{Bricaud1995}.absorption`) raises an
-error that points you to the paper; drop the CSV into `data/` to
-activate. Mason, Bricaud, and Petzold are on the Phase 4 to-do list.
+The Bricaud bundle is the **1998 update** to the original 1995 JGR fit;
+the 1995 table is paywalled and the 1998 + UV-extended values are the
+community-standard replacement (they are what HydroLight 5 and NASA
+OCSSW ship).
 
 ## Testing
 
@@ -161,8 +174,9 @@ activate. Mason, Bricaud, and Petzold are on the Phase 4 to-do list.
 julia --project=. -e 'using Pkg; Pkg.test()'
 ```
 
-199 tests across IOP algebra, material spectra, phase-function
-normalization and moments, layer assembly, and forward-mode AD.
+276 tests across IOP algebra, material spectra, phase-function
+normalization and moments, layer assembly, inelastic kernels
+(fluorescence + Raman), and forward-mode AD.
 
 ## Related packages
 

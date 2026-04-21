@@ -29,7 +29,7 @@
 #
 #   AbstractPhytoplanktonModel
 #       ├── Gordon1992
-#       ├── Bricaud1995              # aph* power law
+#       ├── Bricaud1998              # aph* power law
 #       └── MobleyNewCase1            # HydroLight 5 default
 #
 # A concrete `Phytoplankton` struct carries a *model* as a type parameter, so
@@ -40,7 +40,7 @@
 #         model::M
 #         Chl::FT
 #     end
-#     absorption(p::Phytoplankton{FT, Bricaud1995}, λ)  # dispatches on M
+#     absorption(p::Phytoplankton{FT, Bricaud1998}, λ)  # dispatches on M
 #     absorption(p::Phytoplankton{FT, Gordon1992},   λ)  # different method
 #
 # This means swapping a parameterization is a single-symbol change at the
@@ -98,7 +98,7 @@ abstract type AbstractAbsorbingScatterer{FT} <: AbstractAbsorber{FT} end
 # =============================================================================
 # These are empty singleton types used as type parameters on the concrete
 # constituent structs. They exist solely to drive multiple dispatch so that
-# `absorption(p::Phytoplankton{FT, Bricaud1995}, λ)` and
+# `absorption(p::Phytoplankton{FT, Bricaud1998}, λ)` and
 # `absorption(p::Phytoplankton{FT, Gordon1992},  λ)` resolve to different
 # methods with zero runtime branching.
 

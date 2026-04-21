@@ -52,7 +52,7 @@ obtained by a first-pass elastic solve (see Fell 1997 §2.2.9).
 
 ```julia
 water = PureWater{Float64}()
-chl   = Phytoplankton{Float64, Bricaud1995}(Chl = 0.5)
+chl   = Phytoplankton{Float64, Bricaud1998}(Chl = 0.5)
 layer = OceanLayer(0.0, 5.0, [water, chl])
 λ     = 400.0:5.0:700.0
 
