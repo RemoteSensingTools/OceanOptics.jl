@@ -1,6 +1,9 @@
 using Documenter
 using OceanOptics
 
+# GR backend needs an off-screen target in headless CI
+ENV["GKSwstype"] = "100"
+
 DocMeta.setdocmeta!(OceanOptics, :DocTestSetup, :(using OceanOptics); recursive = true)
 
 makedocs(
@@ -15,6 +18,7 @@ makedocs(
     pages    = [
         "Home"                 => "index.md",
         "End-to-end example"   => "example.md",
+        "Gallery"              => "gallery.md",
         "Consumer API"         => "consumer_api.md",
         "vSmartMOM integration audit" => "vsmartmom_integration.md",
         "Reference"            => [
