@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>End-to-end example · OceanOptics.jl</title><meta name="title" content="End-to-end example · OceanOptics.jl"/><meta property="og:title" content="End-to-end example · OceanOptics.jl"/><meta property="twitter:title" content="End-to-end example · OceanOptics.jl"/><meta name="description" content="Documentation for OceanOptics.jl."/><meta property="og:description" content="Documentation for OceanOptics.jl."/><meta property="twitter:description" content="Documentation for OceanOptics.jl."/><meta property="og:url" content="https://RemoteSensingTools.github.io/OceanOptics.jl/example/"/><meta property="twitter:url" content="https://RemoteSensingTools.github.io/OceanOptics.jl/example/"/><link rel="canonical" href="https://RemoteSensingTools.github.io/OceanOptics.jl/example/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">OceanOptics.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li class="is-active"><a class="tocitem" href>End-to-end example</a><ul class="internal"><li><a class="tocitem" href="#Biogeochemistry"><span>Biogeochemistry</span></a></li><li><a class="tocitem" href="#Building-a-layer-and-computing-the-optical-bundle"><span>Building a layer and computing the optical bundle</span></a></li><li><a class="tocitem" href="#Multi-layer-column-via-the-Fell-(1997)-grid"><span>Multi-layer column via the Fell (1997) grid</span></a></li><li><a class="tocitem" href="#Inelastic-kernels"><span>Inelastic kernels</span></a></li><li><a class="tocitem" href="#Forward-mode-automatic-differentiation"><span>Forward-mode automatic differentiation</span></a></li></ul></li><li><a class="tocitem" href="../consumer_api/">Consumer API</a></li><li><span class="tocitem">Reference</span><ul><li><a class="tocitem" href="../reference/types/">Types</a></li><li><a class="tocitem" href="../reference/materials/">Materials</a></li><li><a class="tocitem" href="../reference/phases/">Phase functions</a></li><li><a class="tocitem" href="../reference/inelastic/">Inelastic</a></li><li><a class="tocitem" href="../reference/io/">Data loading</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>End-to-end example</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>End-to-end example</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/RemoteSensingTools/OceanOptics.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/RemoteSensingTools/OceanOptics.jl/blob/main/docs/src/example.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="End-to-end-example"><a class="docs-heading-anchor" href="#End-to-end-example">End-to-end example</a><a id="End-to-end-example-1"></a><a class="docs-heading-anchor-permalink" href="#End-to-end-example" title="Permalink"></a></h1><p>A realistic Case-1 water workflow: build the biogeochemistry, compute inherent optical properties over the visible, inspect the inelastic source kernels, and differentiate the elastic-path output w.r.t. the chlorophyll concentration.</p><p>All code blocks below are executed at documentation-build time by Documenter&#39;s <code>@example</code> machinery, so the numerical outputs in the rendered page are the <em>actual</em> package outputs.</p><h2 id="Biogeochemistry"><a class="docs-heading-anchor" href="#Biogeochemistry">Biogeochemistry</a><a id="Biogeochemistry-1"></a><a class="docs-heading-anchor-permalink" href="#Biogeochemistry" title="Permalink"></a></h2><p>Open-ocean oligotrophic water at <code>Chl = 0.5 mg/m³</code>, surface temperature <code>T = 20 °C</code>, practical salinity <code>S = 35</code>.</p><pre><code class="language-julia hljs">using OceanOptics
+
+water = PureWater{Float64}(
+    absorption_model = CombinedPopeFryMason(),
+    scattering_model = ZhangHu2009(),
+    temperature      = 20.0,
+    salinity         = 35.0,
+)
+cdom  = CDOM{Float64}(a_ref = 0.03, λ_ref = 440.0, slope = 0.014)
+phyto = Phytoplankton{Float64, Bricaud1998}(Chl = 0.5)</code></pre><p>Each constituent exposes the same <code>absorption</code> / <code>scattering</code> / <code>backscattering</code> traits. Spot-checks at the chlorophyll blue peak:</p><pre><code class="language-julia hljs">λ = 440.0
+a_water = absorption(water, λ)
+b_water = scattering(water, λ)
+a_cdom  = absorption(cdom, λ)
+a_phyto = absorption(phyto, λ)
+b_phyto = scattering(phyto, λ)
+(a_water, b_water, a_cdom, a_phyto, b_phyto)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(0.00635, 0.004379595171013634, 0.03, 0.040376381500054064, 0.24400159789536252)</code></pre><h2 id="Building-a-layer-and-computing-the-optical-bundle"><a class="docs-heading-anchor" href="#Building-a-layer-and-computing-the-optical-bundle">Building a layer and computing the optical bundle</a><a id="Building-a-layer-and-computing-the-optical-bundle-1"></a><a class="docs-heading-anchor-permalink" href="#Building-a-layer-and-computing-the-optical-bundle" title="Permalink"></a></h2><p>Stack the three constituents in a 5-m surface layer and compute the elastic optical bundle at 10-nm resolution across the visible:</p><pre><code class="language-julia hljs">layer = OceanLayer(0.0, 5.0,
+                   AbstractOceanConstituent{Float64}[water, cdom, phyto])
+λ_grid = collect(400.0:10.0:700.0)
+opt    = layer_optics(layer, λ_grid; ℓ_max = 32)
+opt</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">OceanLayerOptics{Float64}(Δz=5.0 m, 31 λ, 32 moments, scalar)
+</code></pre><p>Inspect the single-scattering albedo and the backscatter fraction across the spectrum:</p><pre><code class="language-julia hljs">using Printf
+println(&quot; λ [nm]   τ         ϖ         B&quot;)
+for i in eachindex(opt.λ)
+    @printf(&quot;%6.0f  %.5f   %.4f   %.4f\n&quot;,
+            opt.λ[i], opt.τ[i], opt.ϖ[i], opt.B[i])
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"> λ [nm]   τ         ϖ         B
+   400  1.84689   0.7445   0.0217
+   410  1.77897   0.7526   0.0208
+   420  1.72305   0.7573   0.0200
+   430  1.67168   0.7612   0.0193
+   440  1.62554   0.7640   0.0186
+   450  1.57272   0.7711   0.0180
+   460  1.51787   0.7808   0.0175
+   470  1.46890   0.7888   0.0170
+   480  1.42616   0.7948   0.0165
+   490  1.38989   0.7982   0.0161
+   500  1.36653   0.7950   0.0157
+   510  1.37768   0.7725   0.0154
+   520  1.37630   0.7579   0.0151
+   530  1.35161   0.7567   0.0148
+   540  1.33783   0.7499   0.0145
+   550  1.35195   0.7282   0.0142
+   560  1.34874   0.7166   0.0140
+   570  1.36109   0.6973   0.0138
+   580  1.44053   0.6472   0.0136
+   590  1.64912   0.5556   0.0134
+   600  2.06570   0.4360   0.0132
+   610  2.25907   0.3920   0.0131
+   620  2.30094   0.3785   0.0129
+   630  2.36718   0.3620   0.0128
+   640  2.44974   0.3442   0.0126
+   650  2.58331   0.3213   0.0125
+   660  2.93305   0.2787   0.0124
+   670  3.09363   0.2602   0.0123
+   680  3.20478   0.2474   0.0122
+   690  3.40731   0.2293   0.0121
+   700  3.91361   0.1967   0.0120</code></pre><p>The Legendre-moment matrix <code>opt.β</code> has size <code>(ℓ_max+1, n_λ)</code> with <code>β_0 ≡ 1</code> by construction:</p><pre><code class="language-julia hljs">size(opt.β), opt.β[1, 1], opt.β[2, 1], opt.β[3, 1]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">((33, 31), 1.0, 2.7853564352666744, 4.46430796058452)</code></pre><h2 id="Multi-layer-column-via-the-Fell-(1997)-grid"><a class="docs-heading-anchor" href="#Multi-layer-column-via-the-Fell-(1997)-grid">Multi-layer column via the Fell (1997) grid</a><a id="Multi-layer-column-via-the-Fell-(1997)-grid-1"></a><a class="docs-heading-anchor-permalink" href="#Multi-layer-column-via-the-Fell-(1997)-grid" title="Permalink"></a></h2><p>The Fell (1997) §5.2.1 grid (1 m in 0–10 m, 2 m in 10–20 m, 5 m below) is available as a one-liner:</p><pre><code class="language-julia hljs">column = fell_column(AbstractOceanConstituent{Float64}[water, cdom, phyto];
+                     depth = 60.0)
+(n_layers(column), thickness(column), bottom_depth(column))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(23, 60.0, 60.0)</code></pre><pre><code class="language-julia hljs">layer_thicknesses(column)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">23-element Vector{Float64}:
+ 1.0
+ 1.0
+ 1.0
+ 1.0
+ 1.0
+ 1.0
+ 1.0
+ 1.0
+ 1.0
+ 1.0
+ ⋮
+ 2.0
+ 5.0
+ 5.0
+ 5.0
+ 5.0
+ 5.0
+ 5.0
+ 5.0
+ 5.0</code></pre><h2 id="Inelastic-kernels"><a class="docs-heading-anchor" href="#Inelastic-kernels">Inelastic kernels</a><a id="Inelastic-kernels-1"></a><a class="docs-heading-anchor-permalink" href="#Inelastic-kernels" title="Permalink"></a></h2><p>Chlorophyll-a fluorescence is built from the phytoplankton absorber plus a Gaussian emission band at 685 nm. The package returns kernels a downstream two-pass RT solver convolves against the pass-1 irradiance; we do not solve RT here.</p><pre><code class="language-julia hljs">sif = chlorophyll_fluorescence(phyto)
+sif</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">IsotropicFluorescence{Float64}(Phytoplankton, φ=0.003, GaussianEmission{Float64}(685.0, 10.6))</code></pre><pre><code class="language-julia hljs">excitation_absorption(sif, 440.0)           # φ · a_φ(440)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">0.00012112914450016219</code></pre><p>The emission density peaks at 685 nm with FWHM ≈ 25 nm:</p><pre><code class="language-julia hljs">using Printf
+println(&quot; λ [nm]    f(440, λ) [1/nm]&quot;)
+for λ in (640.0, 670.0, 680.0, 685.0, 690.0, 700.0, 730.0)
+    @printf(&quot;%6.1f    %.5f\n&quot;, λ, emission(sif, 440.0, λ))
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"> λ [nm]    f(440, λ) [1/nm]
+ 640.0    0.00000
+ 670.0    0.01383
+ 680.0    0.03367
+ 685.0    0.03764
+ 690.0    0.03367
+ 700.0    0.01383
+ 730.0    0.00000</code></pre><p>Water Raman at 440-nm excitation peaks around 517 nm (the <code>3400 cm⁻¹</code> Stokes shift of the O–H stretch):</p><pre><code class="language-julia hljs">ram = WaterRaman{Float64}()
+(raman_peak_wavelength(ram, 440.0),
+ excitation_absorption(ram, 440.0),
+ emission(ram, 440.0, 517.0))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(517.4035747883349, 0.0004771809137890739, 0.1728498373727862)</code></pre><h2 id="Forward-mode-automatic-differentiation"><a class="docs-heading-anchor" href="#Forward-mode-automatic-differentiation">Forward-mode automatic differentiation</a><a id="Forward-mode-automatic-differentiation-1"></a><a class="docs-heading-anchor-permalink" href="#Forward-mode-automatic-differentiation" title="Permalink"></a></h2><p>Every forward function along the elastic path is AD-transparent via <code>ForwardDiff.Dual</code> inputs on the <em>wavelength</em> and most model parameters. Spectral sensitivity of the total absorption coefficient at 440 nm:</p><pre><code class="language-julia hljs">using ForwardDiff
+∂a_∂λ = ForwardDiff.derivative(
+    λ -&gt; absorption(water, λ) + absorption(cdom, λ) + absorption(phyto, λ),
+    440.0,
+)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">-0.00048170627749504597</code></pre><p>Struct parameters themselves are typed <code>FT&lt;:AbstractFloat</code>, so differentiating with respect to e.g. the CDOM slope goes through the analytic formula rather than the struct:</p><pre><code class="language-julia hljs">a_ref, λ_ref = 0.03, 440.0
+g(S) = sum(a_ref * exp(-S * (λ - λ_ref)) for λ in (500.0, 600.0, 700.0))
+ForwardDiff.derivative(g, 0.014)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">-1.492848046125123</code></pre><p>See <code>test/test_ad.jl</code> for a wider set of worked AD examples, including CDOM, Pure Water, Morel / Zhang-Hu, Fournier-Forand and Henyey-Greenstein sensitivities.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../consumer_api/">Consumer API »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Tuesday 21 April 2026 16:18">Tuesday 21 April 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
