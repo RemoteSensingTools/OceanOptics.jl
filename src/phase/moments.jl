@@ -1,10 +1,15 @@
 # =============================================================================
-# Legendre-moment expansion of phase functions
+# Legendre-moment expansion of phase functions (de Haan 1987 convention)
 # =============================================================================
 #
-# The β_ℓ coefficients are computed by Gauss-Legendre quadrature:
+# The β_ℓ coefficients are computed by Gauss-Legendre quadrature in the
+# de Haan 1987 / HydroLight convention, i.e.
 #
-#     β_ℓ = (1/2) ∫₋₁¹ p(μ) P_ℓ(μ) dμ
+#     β_ℓ = (2ℓ+1)/2 · ∫₋₁¹ p(μ) P_ℓ(μ) dμ
+#
+# so that p(μ) = Σ_ℓ β_ℓ P_ℓ(μ) exactly recovers the phase function.
+# Internally we accumulate the un-weighted moment (1/2)∫ p P_ℓ dμ and
+# multiply by (2ℓ+1) at the end.
 #
 # A single Gauss-Legendre rule with `nq` nodes integrates polynomials up to
 # degree 2·nq − 1 exactly. For p(μ) non-polynomial (any real phase function),
@@ -73,12 +78,19 @@ function numerical_moments(pf::AbstractOceanPhaseFunction{FT}, ℓ_max::Integer;
     # ocean backscatter fractions < 0.02, Petzold, TTHG) are under-resolved
     # by any practical Gauss-Legendre rule: the peak near μ = 1 carries
     # enough integral weight to bias β₀ by 5–15 %. Since the input phase
-    # function is normalized to `(1/2)∫p dμ = 1`, we know β₀ *should* be 1
-    # exactly, and the relative weights between moments are preserved by a
-    # uniform rescaling. Divide out the quadrature-estimated β₀ so the
-    # returned moment vector is self-consistent with its normalization.
+    # function is normalized to `(1/2)∫p dμ = 1`, we know (1/2)∫p dμ
+    # *should* be 1 exactly, and the relative weights between moments
+    # are preserved by a uniform rescaling. Divide out the quadrature
+    # estimate of β₀-pre-normalization so the returned moment vector is
+    # self-consistent.
     if β[1] > zero(FT)
         β ./= β[1]
+    end
+
+    # Convert to de Haan 1987 convention: β_ℓ → (2ℓ+1) β_ℓ so that
+    # p(μ) = Σ β_ℓ P_ℓ(μ) holds directly.
+    @inbounds for ℓ in 0:ℓ_max
+        β[ℓ + 1] *= FT(2ℓ + 1)
     end
     return β
 end

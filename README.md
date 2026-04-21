@@ -1,6 +1,7 @@
 # OceanOptics.jl
 
 [![CI](https://github.com/RemoteSensingTools/OceanOptics.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/RemoteSensingTools/OceanOptics.jl/actions/workflows/CI.yml)
+[![Documentation](https://img.shields.io/badge/docs-stable-blue.svg)](https://RemoteSensingTools.github.io/OceanOptics.jl/)
 
 Inherent optical properties (IOPs), phase-function Legendre expansions, and
 inelastic source terms of natural waters from biogeochemical state — in
@@ -101,7 +102,7 @@ The stable contract is:
 * **`OceanLayerOptics{FT}`** — per-layer bundle with fields `λ`
   (`[nm]`), `Δz` (`[m]`), `τ`, `ϖ`, `B`, and `β` (Legendre moments,
   indexed `[ℓ+1, λ]`). Optional polarized Greek elements α, γ, δ,
-  ε, ζ follow the same `[ℓ+1, λ]` layout when populated.
+  ϵ, ζ follow the same `[ℓ+1, λ]` layout when populated.
 * **`layer_optics(layer::OceanLayer, λ_grid; ℓ_max)`** — the
   single entry point that produces an `OceanLayerOptics` from a
   biogeochemical state.

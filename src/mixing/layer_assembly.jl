@@ -25,7 +25,7 @@
 # =============================================================================
 
 """
-    layer_optics(layer, λ_grid; ℓ_max=64, FT=Float64) -> OceanLayerOptics
+    layer_optics(layer, λ_grid; ℓ_max=64, polarized=false, FT=Float64) -> OceanLayerOptics
 
 Compute the complete optical bundle for one ocean layer at each wavelength
 in `λ_grid`.
@@ -36,17 +36,21 @@ in `λ_grid`.
   `Unitful` with spectral units
 - `ℓ_max` — maximum Legendre order for the phase-function expansion
   (default 64, which is adequate for Gauss-Lobatto RT with N ≤ 32)
+- `polarized` — also compute the polarized Greek coefficients
+  `(α, γ, δ, ϵ, ζ)` via [`phase_matrix_moments`](@ref); populates the
+  corresponding `OceanLayerOptics` fields. Default `false` for scalar RT.
 - `FT` — floating-point precision
 
 # Returns
 An [`OceanLayerOptics`](@ref) containing τ, ϖ, β_ℓ(λ) and the diagnostic
-backscatter fraction B, all on the `λ_grid`.
+backscatter fraction B, all on the `λ_grid`. When `polarized = true` the
+α/γ/δ/ϵ/ζ matrices are filled in the same `(ℓ_max+1, nλ)` layout.
 
 # Notes
 This function handles only the *elastic* IOPs. Inelastic source terms
-(fluorescence, Raman) are computed separately by
-[`inelastic_sources`](@ref) from a scalar irradiance field `E°(τ, λ)`
-obtained by a first-pass elastic solve (see Fell 1997 §2.2.9).
+(fluorescence, Raman) are computed separately by a downstream two-pass
+RT solver from a scalar irradiance field `E°(τ, λ)` obtained from the
+first pass (see Fell 1997 §2.2.9).
 
 # Example
 
@@ -58,12 +62,17 @@ layer = OceanLayer(0.0, 5.0, [water, chl])
 
 opt = layer_optics(layer, collect(λ); ℓ_max = 64)
 # opt.τ, opt.ϖ, opt.β all have one column/entry per λ.
+
+# For polarized (Stokes-vector) RT
+opt_p = layer_optics(layer, collect(λ); ℓ_max = 64, polarized = true)
+# opt_p.α, opt_p.γ, opt_p.δ, opt_p.ϵ, opt_p.ζ are populated too.
 ```
 """
 function layer_optics(layer::OceanLayer, λ_grid::AbstractVector{<:Real};
                       ℓ_max::Integer = 64,
+                      polarized::Bool = false,
                       FT::Type = Float64)
-    @assert ℓ_max ≥ 0 "ℓ_max must be non-negative"
+    ℓ_max ≥ 0 || throw(ArgumentError("ℓ_max must be non-negative, got $ℓ_max"))
     nλ = length(λ_grid)
     Δz = FT(thickness(layer))
     λ  = FT.(λ_grid)
@@ -73,6 +82,13 @@ function layer_optics(layer::OceanLayer, λ_grid::AbstractVector{<:Real};
     ϖ = zeros(FT, nλ)
     B = zeros(FT, nλ)
     β = zeros(FT, ℓ_max + 1, nλ)
+    if polarized
+        α = zeros(FT, ℓ_max + 1, nλ)
+        γ = zeros(FT, ℓ_max + 1, nλ)
+        δ = zeros(FT, ℓ_max + 1, nλ)
+        ϵ = zeros(FT, ℓ_max + 1, nλ)
+        ζ = zeros(FT, ℓ_max + 1, nλ)
+    end
 
     # Split constituents by role — avoids re-dispatching per λ inside the loop
     # and lets us extract phase functions once.
@@ -85,14 +101,17 @@ function layer_optics(layer::OceanLayer, λ_grid::AbstractVector{<:Real};
     # itself varies weakly; future wavelength-dependent phase functions
     # would shift this computation inside the λ loop).
     phase_moments = [phase_function_moments(pf, ℓ_max) for pf in phase_fns]
+    if polarized
+        # Full 6-element Greek expansion per scatterer. Non-polarizable
+        # phase functions contribute β only (zeros elsewhere) via the
+        # scalar-fallback `phase_matrix_moments`.
+        phase_matrices = [phase_matrix_moments(pf, ℓ_max) for pf in phase_fns]
+    end
 
     @inbounds for (iλ, λ_i) in enumerate(λ)
-        # Absorption + scattering coefficients per constituent
         a_total  = zero(FT)
         b_total  = zero(FT)
         bb_total = zero(FT)
-        # Scattering coefficient per scattering constituent — needed for
-        # phase-function mixing below
         b_per_scatterer = zeros(FT, length(scatterers))
 
         for c in layer.constituents
@@ -117,7 +136,35 @@ function layer_optics(layer::OceanLayer, λ_grid::AbstractVector{<:Real};
         β_iλ = mix_phase_moments(b_per_scatterer, phase_moments;
                                  n_moments = ℓ_max + 1)
         β[:, iλ] .= β_iλ
+
+        if polarized
+            # Mix each Greek coefficient with the same scattering weights.
+            # The α/γ/δ/ϵ/ζ scalars (not β) have no `[1] = 1` normalization
+            # invariant, so we use a direct weighted sum without the
+            # fallback-to-unit-isotropic behavior of mix_phase_moments.
+            α[:, iλ] .= _greek_mix(b_per_scatterer, phase_matrices, :α, b_total, FT, ℓ_max + 1)
+            γ[:, iλ] .= _greek_mix(b_per_scatterer, phase_matrices, :γ, b_total, FT, ℓ_max + 1)
+            δ[:, iλ] .= _greek_mix(b_per_scatterer, phase_matrices, :δ, b_total, FT, ℓ_max + 1)
+            ϵ[:, iλ] .= _greek_mix(b_per_scatterer, phase_matrices, :ϵ, b_total, FT, ℓ_max + 1)
+            ζ[:, iλ] .= _greek_mix(b_per_scatterer, phase_matrices, :ζ, b_total, FT, ℓ_max + 1)
+        end
     end
 
-    return OceanLayerOptics(; λ, Δz, τ, ϖ, B, β)
+    return polarized ?
+        OceanLayerOptics(; λ, Δz, τ, ϖ, B, β, α, γ, δ, ϵ = ϵ, ζ) :
+        OceanLayerOptics(; λ, Δz, τ, ϖ, B, β)
+end
+
+# Scattering-weighted mixing of one Greek coefficient across constituents.
+# Returns a zero vector when total scattering is zero.
+function _greek_mix(b_per_scatterer::AbstractVector{FT},
+                    phase_matrices, field::Symbol, b_total::FT,
+                    ::Type{FT}, N::Integer) where {FT}
+    out = zeros(FT, N)
+    b_total == zero(FT) && return out
+    @inbounds for (b, mats) in zip(b_per_scatterer, phase_matrices)
+        coef = getfield(mats, field)
+        out .+= (b / b_total) .* coef
+    end
+    return out
 end

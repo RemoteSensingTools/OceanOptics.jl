@@ -102,8 +102,10 @@ abstract type AbstractAbsorbingScatterer{FT} <: AbstractAbsorber{FT} end
 # `absorption(p::Phytoplankton{FT, Gordon1992},  λ)` resolve to different
 # methods with zero runtime branching.
 
-"Parameterization-model tag for pure water IOPs."
-abstract type AbstractPureWaterModel end
+# Pure water carries two distinct model axes (absorption + scattering) and
+# therefore lives under its own per-axis abstract types
+# (`AbstractPureWaterAbsorptionModel`, `AbstractPureWaterScatteringModel`)
+# declared in `src/materials/pure_water.jl`.
 
 "Parameterization-model tag for phytoplankton IOPs."
 abstract type AbstractPhytoplanktonModel end

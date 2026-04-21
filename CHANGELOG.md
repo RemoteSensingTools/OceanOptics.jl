@@ -85,7 +85,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `OceanLayer{FT}` with contiguity-validated constructor.
 - `OceanLayerOptics{FT, V, M}` — the stable RT-solver-neutral output
   bundle of `(λ, Δz, τ, ϖ, B, β)` plus optional polarized Greek
-  elements `(α, γ, δ, ε, ζ)`.
+  elements `(α, γ, δ, ϵ, ζ)`.
 - `layer_optics(layer, λ_grid; ℓ_max)` — the single forward entry
   point producing an `OceanLayerOptics`.
 - Materials: `PureWater` (Pope-Fry / Smith-Baker / Mason-Cone-Fry

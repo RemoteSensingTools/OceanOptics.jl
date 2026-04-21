@@ -21,7 +21,7 @@
 # Legendre moments are closed-form: β₀ = 1, β₂ = (1-σ)/(10·(...)),
 # all other β_ℓ = 0 for ℓ ≠ 0, 2.
 #
-# For polarized RT, the full Greek-coefficient expansion (α, γ, δ, ε, ζ)
+# For polarized RT, the full Greek-coefficient expansion (α, γ, δ, ϵ, ζ)
 # has a closed form in terms of σ (Hansen & Travis 1974). A future
 # `polarized_moments(pf) -> GreekCoefs` method can extend this.
 # =============================================================================
@@ -57,39 +57,82 @@ RayleighWaterPhase{FT}(; depolarization = FT(0.039)) where {FT<:AbstractFloat} =
     RayleighWaterPhase{FT}(FT(depolarization))
 RayleighWaterPhase(; kwargs...) = RayleighWaterPhase{Float64}(; kwargs...)
 
-# "Anisotropy factor" σ = 2ρ/(1-ρ) — shows up everywhere
-_rayleigh_σ(pf::RayleighWaterPhase{FT}) where {FT} = FT(2) * pf.depolarization / (one(FT) - pf.depolarization)
 
 # -----------------------------------------------------------------------------
 
+# Proutière depolarization factors used throughout the Greek expansion
+# (Sanghavi 2014 Eq. 16; de Haan 1987; cf. vSmartMOM get_greek_rayleigh).
+_rayleigh_dpl_p(ρ) = (1 - ρ) / (1 + ρ / 2)
+_rayleigh_dpl_r(ρ) = (1 - 2ρ) / (1 - ρ)
+
 function phase_function_value(pf::RayleighWaterPhase{FT}, cosθ::Real) where {FT}
-    μ = FT(cosθ)
-    σ = _rayleigh_σ(pf)
-    # Normalized so (1/2) ∫₋₁¹ p dμ = 1
-    return FT(3) / (FT(2) * (FT(2) + σ)) * ((one(FT) + σ) + (one(FT) - σ) * μ^2)
+    # De Haan convention: p(μ) = Σ β_ℓ P_ℓ(μ). For Rayleigh only β_0 = 1
+    # and β_2 = ½·dpl_p are non-zero, giving
+    #   p(μ) = 1 + β₂ · (3μ² − 1)/2
+    μ      = FT(cosθ)
+    β₂     = FT(0.5) * _rayleigh_dpl_p(pf.depolarization)
+    return one(FT) + β₂ * (FT(3) * μ^2 - one(FT)) / FT(2)
 end
 
 function phase_function_moments(pf::RayleighWaterPhase{FT}, ℓ_max::Integer) where {FT}
+    # Rayleigh is a degree-2 polynomial in μ, so only β₀ and β₂ are non-zero
+    # in the de Haan convention (`p(μ) = Σ β_ℓ P_ℓ(μ)`). The closed-form
+    # values come from Hansen-Travis (1974) with Proutière's depolarization
+    # factor dpl_p = (1 − ρ)/(1 + ρ/2); at ρ = 0 this recovers pure
+    # Rayleigh with β₂ = ½.
     β = zeros(FT, ℓ_max + 1)
-    σ = _rayleigh_σ(pf)
-    β[1] = one(FT)                                    # β₀ = 1 (normalization)
-    # The Rayleigh-with-depolarization phase function
-    #   p(μ) = 3/(2(2+σ)) · [(1+σ) + (1-σ)μ²]
-    # is a degree-2 polynomial in μ, so only β₀ and β₂ are non-zero in the
-    # convention p(μ) = Σ_ℓ (2ℓ+1) β_ℓ P_ℓ(μ), β_ℓ = (1/2)∫₋₁¹ p·P_ℓ dμ.
-    # Evaluating the integral directly yields β₂ = (1-σ)/(5(2+σ)); at σ=0
-    # this recovers the pure-Rayleigh value β₂ = 1/10.
+    β[1] = one(FT)
     if ℓ_max ≥ 2
-        β[3] = (one(FT) - σ) / (FT(5) * (FT(2) + σ))
+        β[3] = FT(0.5) * _rayleigh_dpl_p(pf.depolarization)
     end
     return β
 end
 
+"""
+    phase_matrix_moments(pf::RayleighWaterPhase, ℓ_max) -> NamedTuple
+
+Closed-form polarized Greek expansion of the depolarized Rayleigh phase
+matrix (Hansen & Travis 1974; Sanghavi 2014 Eq. 16). Only ℓ ∈ {0, 1, 2}
+carries non-zero moments:
+
+```
+β[0] = 1                     α[2] = 3·dpl_p
+β[2] = ½·dpl_p               γ[2] = √(3/2)·dpl_p
+δ[1] = (3/2)·dpl_p·dpl_r     ϵ[ℓ] = ζ[ℓ] = 0
+
+dpl_p = (1 − ρ)/(1 + ρ/2)
+dpl_r = (1 − 2ρ)/(1 − ρ)
+```
+
+with `ρ = pf.depolarization` the Cabannes depolarization ratio.
+"""
+function phase_matrix_moments(pf::RayleighWaterPhase{FT}, ℓ_max::Integer) where {FT}
+    ℓ_max ≥ 0 || throw(ArgumentError("ℓ_max must be non-negative, got $ℓ_max"))
+    N = ℓ_max + 1
+    α = zeros(FT, N); β = zeros(FT, N); γ = zeros(FT, N)
+    δ = zeros(FT, N); ϵ = zeros(FT, N); ζ = zeros(FT, N)
+
+    ρ     = pf.depolarization
+    dpl_p = _rayleigh_dpl_p(ρ)
+    dpl_r = _rayleigh_dpl_r(ρ)
+
+    β[1] = one(FT)                                 # ℓ = 0
+    if ℓ_max ≥ 1
+        δ[2] = FT(1.5) * dpl_p * dpl_r             # ℓ = 1
+    end
+    if ℓ_max ≥ 2
+        α[3] = FT(3) * dpl_p                       # ℓ = 2
+        β[3] = FT(0.5) * dpl_p
+        γ[3] = dpl_p * sqrt(FT(1.5))
+    end
+    return (α = α, β = β, γ = γ, δ = δ, ϵ = ϵ, ζ = ζ)
+end
+
 function backscatter_fraction(pf::RayleighWaterPhase{FT}) where {FT}
-    # Rayleigh is forward/back symmetric, so B = 0.5 exactly for any σ.
+    # Rayleigh is forward/back symmetric, so B = 0.5 exactly for any ρ.
     return FT(0.5)
 end
 
 asymmetry_parameter(::RayleighWaterPhase{FT}) where {FT} = zero(FT)
 
-is_polarizable(::RayleighWaterPhase) = true   # full Greek expansion is known; see notes above
+is_polarizable(::RayleighWaterPhase) = true

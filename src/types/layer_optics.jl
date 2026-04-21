@@ -17,7 +17,7 @@ An `IOP` carries the volumetric coefficients `(a, b, bb)`; an
 * `ϖ = b / (a + b)`   — single-scattering albedo
 * `β_ℓ`              — Legendre-moment expansion of the (mixed) phase function
 
-For polarized RT all six Greek coefficients `(α, β, γ, δ, ε, ζ)` are carried;
+For polarized RT all six Greek coefficients `(α, β, γ, δ, ϵ, ζ)` are carried;
 for scalar RT only `β` is meaningful and the others may be empty / absent.
 
 # Fourier / Greek coefficients
@@ -49,8 +49,8 @@ struct OceanLayerOptics{FT, V<:AbstractVector{FT}, M<:AbstractMatrix{FT}}
     γ::M
     "δ_ℓ(λ), B[4,4]"
     δ::M
-    "ε_ℓ(λ), B[3,4] = -B[4,3]"
-    ε::M
+    "ϵ_ℓ(λ), B[3,4] = -B[4,3]"
+    ϵ::M
     "ζ_ℓ(λ), B[3,3]"
     ζ::M
 
@@ -70,7 +70,7 @@ function OceanLayerOptics(; λ::AbstractVector, Δz::Real,
                            α::AbstractMatrix = similar(β, 0, 0),
                            γ::AbstractMatrix = similar(β, 0, 0),
                            δ::AbstractMatrix = similar(β, 0, 0),
-                           ε::AbstractMatrix = similar(β, 0, 0),
+                           ϵ::AbstractMatrix = similar(β, 0, 0),
                            ζ::AbstractMatrix = similar(β, 0, 0),
                            J_source = nothing)
     length(λ) == length(τ) == length(ϖ) == length(B) ||
@@ -80,7 +80,7 @@ function OceanLayerOptics(; λ::AbstractVector, Δz::Real,
     FT = eltype(λ)
     V  = typeof(λ)
     M  = typeof(β)
-    return OceanLayerOptics{FT, V, M}(λ, FT(Δz), τ, ϖ, B, β, α, γ, δ, ε, ζ, J_source)
+    return OceanLayerOptics{FT, V, M}(λ, FT(Δz), τ, ϖ, B, β, α, γ, δ, ϵ, ζ, J_source)
 end
 
 "Number of Legendre moments stored (ℓ_max + 1)."

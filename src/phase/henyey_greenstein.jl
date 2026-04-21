@@ -58,15 +58,14 @@ function phase_function_value(pf::HenyeyGreensteinPhase{FT}, cosθ::Real) where 
     return (1 - g^2) / (1 + g^2 - 2 * g * cosθ)^FT(1.5)
 end
 
-# Closed-form moments: β_ℓ = g^ℓ. Overrides the numerical-quadrature
-# fallback in phase/moments.jl, which would otherwise recompute them at
-# quadrature cost O(ℓ_max²) per call.
+# Closed-form moments in the de Haan convention: β_ℓ = (2ℓ+1)·g^ℓ.
+# Overrides the numerical-quadrature fallback in phase/moments.jl.
 function phase_function_moments(pf::HenyeyGreensteinPhase{FT}, ℓ_max::Integer) where {FT}
     ℓ_max ≥ 0 || throw(ArgumentError("ℓ_max must be non-negative, got $ℓ_max"))
     β = Vector{FT}(undef, ℓ_max + 1)
     g = pf.g
     @inbounds for ℓ in 0:ℓ_max
-        β[ℓ + 1] = g^ℓ
+        β[ℓ + 1] = FT(2ℓ + 1) * g^ℓ
     end
     return β
 end

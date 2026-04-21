@@ -2,14 +2,14 @@ using QuadGK
 
 @testset "Phase functions" begin
 
-    @testset "Rayleigh (depolarized)" begin
-        # Pure-Rayleigh (σ=0) closed-form β₂ = 1/10; all other moments zero.
+    @testset "Rayleigh (depolarized) — de Haan convention" begin
+        # Pure-Rayleigh (ρ=0): β₀ = 1, β₂ = 1/2, all other moments zero.
         pf0 = RayleighWaterPhase{Float64}(depolarization = 0.0)
         β   = phase_function_moments(pf0, 8)
         @test β[1] ≈ 1.0                    # β₀ (normalization)
         @test β[2] ≈ 0.0                    # β₁ (asymmetry = 0)
-        @test β[3] ≈ 1/10                   # β₂ (pure Rayleigh)
-        @test all(β[4:end] .≈ 0.0)          # degree-2 polynomial → no higher ℓ
+        @test β[3] ≈ 0.5                    # β₂ (pure Rayleigh, de Haan)
+        @test all(β[4:end] .≈ 0.0)
 
         # Normalization of the continuous form: (1/2) ∫₋₁¹ p(μ) dμ = 1
         integrand(μ) = phase_function_value(pf0, μ) / 2
@@ -23,21 +23,68 @@ using QuadGK
         # Forward/back symmetry: B = 1/2 exactly
         @test backscatter_fraction(pf0) == 0.5
 
-        # With depolarization, β₂ follows the closed form (1-σ)/(5(2+σ))
-        pf_ρ = RayleighWaterPhase{Float64}(depolarization = 0.09)
-        σ    = 2 * 0.09 / (1 - 0.09)
-        expected_β₂ = (1 - σ) / (5 * (2 + σ))
-        β_ρ = phase_function_moments(pf_ρ, 2)
-        @test β_ρ[3] ≈ expected_β₂
+        # With depolarization ρ, β₂ = ½·dpl_p where dpl_p = (1-ρ)/(1+ρ/2).
+        ρ     = 0.09
+        pf_ρ  = RayleighWaterPhase{Float64}(depolarization = ρ)
+        dpl_p = (1 - ρ) / (1 + ρ/2)
+        β_ρ   = phase_function_moments(pf_ρ, 2)
+        @test β_ρ[3] ≈ 0.5 * dpl_p          rtol=1e-12
     end
 
-    @testset "Henyey-Greenstein closed form" begin
-        # β_ℓ = g^ℓ is the defining property
+    @testset "Rayleigh phase_matrix_moments (polarized Greek)" begin
+        # Reference values from Sanghavi (2014) Eq. 16 / vSmartMOM
+        # `get_greek_rayleigh`, reproduced here for the pure-Rayleigh
+        # (ρ = 0) and typical-water (ρ = 0.039) cases.
+        for ρ in (0.0, 0.039, 0.09)
+            pf     = RayleighWaterPhase{Float64}(depolarization = ρ)
+            dpl_p  = (1 - ρ) / (1 + ρ/2)
+            dpl_r  = (1 - 2ρ) / (1 - ρ)
+            m      = phase_matrix_moments(pf, 4)
+
+            # ℓ = 0 row
+            @test m.β[1] ≈ 1.0
+            @test iszero(m.α[1]) && iszero(m.γ[1]) &&
+                  iszero(m.δ[1]) && iszero(m.ϵ[1]) && iszero(m.ζ[1])
+
+            # ℓ = 1: only δ non-zero
+            @test m.δ[2] ≈ 1.5 * dpl_p * dpl_r
+            @test iszero(m.α[2]) && iszero(m.β[2]) && iszero(m.γ[2])
+            @test iszero(m.ϵ[2]) && iszero(m.ζ[2])
+
+            # ℓ = 2: α, β, γ non-zero
+            @test m.α[3] ≈ 3 * dpl_p
+            @test m.β[3] ≈ 0.5 * dpl_p
+            @test m.γ[3] ≈ dpl_p * sqrt(1.5)
+            @test iszero(m.δ[3]) && iszero(m.ϵ[3]) && iszero(m.ζ[3])
+
+            # ℓ ≥ 3: all zero
+            @test all(iszero, m.α[4:end])
+            @test all(iszero, m.β[4:end])
+            @test all(iszero, m.γ[4:end])
+            @test all(iszero, m.δ[4:end])
+            @test all(iszero, m.ϵ[4:end])
+            @test all(iszero, m.ζ[4:end])
+        end
+    end
+
+    @testset "Scalar phase_matrix_moments fallback" begin
+        # Non-polarizable phase functions should populate β from the
+        # scalar moments and zero the other five Greek slots.
+        hg = HenyeyGreensteinPhase{Float64}(g = 0.7)
+        m  = phase_matrix_moments(hg, 6)
+        @test m.β == phase_function_moments(hg, 6)
+        @test all(iszero, m.α) && all(iszero, m.γ) && all(iszero, m.δ)
+        @test all(iszero, m.ϵ) && all(iszero, m.ζ)
+        @test !is_polarizable(hg)
+    end
+
+    @testset "Henyey-Greenstein closed form (de Haan convention)" begin
+        # In the de Haan convention β_ℓ = (2ℓ+1) · g^ℓ.
         for g in (-0.5, 0.0, 0.3, 0.85)
             pf = HenyeyGreensteinPhase{Float64}(g = g)
             β  = phase_function_moments(pf, 12)
             for ℓ in 0:12
-                @test β[ℓ + 1] ≈ g^ℓ
+                @test β[ℓ + 1] ≈ (2ℓ + 1) * g^ℓ
             end
             @test asymmetry_parameter(pf) == g
         end

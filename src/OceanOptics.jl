@@ -103,8 +103,8 @@ export uniform_column, fell_column
 
 # Core methods
 export absorption, scattering, backscattering, attenuation, phase_function
-export phase_function_value, phase_function_moments
-export backscatter_fraction, asymmetry_parameter
+export phase_function_value, phase_function_moments, phase_matrix_moments
+export backscatter_fraction, asymmetry_parameter, is_polarizable
 export single_scattering_albedo
 export layer_optics, mix_phase_moments
 

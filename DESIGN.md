@@ -845,7 +845,7 @@ Three tiers:
 These are design decisions deferred pending real use:
 
 1. **Polarization**: scalar RT is the Phase-1 target. Full Greek
-   coefficients (α, β, γ, δ, ε, ζ) for polarized Stokes-vector RT
+   coefficients (α, β, γ, δ, ϵ, ζ) for polarized Stokes-vector RT
    adds a ~6× expansion cost; add when vSmartMOM's `OceanSurface`
    actually uses polarization.
 

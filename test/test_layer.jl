@@ -59,6 +59,34 @@
         @test all(opt.β[2:end, 1] .≈ 0.0)
     end
 
+    @testset "Polarized layer_optics" begin
+        # Rayleigh-dominated pure-water layer: α, γ, δ must be non-zero
+        # at ℓ=1 (δ) and ℓ=2 (α, γ).
+        water = PureWater{Float64}(scattering_model = Morel1974())
+        layer = OceanLayer(0.0, 1.0, AbstractOceanConstituent{Float64}[water])
+        opt   = layer_optics(layer, [500.0]; ℓ_max = 4, polarized = true)
+
+        # β layout (always present). Default ρ = 0.039 depolarization gives
+        # β₂ = 0.5·dpl_p ≈ 0.4713 — close to but not exactly 1/2.
+        ρ     = 0.039
+        dpl_p = (1 - ρ) / (1 + ρ/2)
+        @test opt.β[1, 1] ≈ 1.0
+        @test opt.β[3, 1] ≈ 0.5 * dpl_p rtol=1e-10
+
+        # Polarized slots now populated
+        @test !isempty(opt.α)
+        @test size(opt.α) == size(opt.β)
+        @test opt.α[3, 1] > 0                  # α₂ = 3·dpl_p > 0
+        @test opt.γ[3, 1] > 0                  # γ₂ = √(3/2)·dpl_p > 0
+        @test opt.δ[2, 1] > 0                  # δ₁ = 1.5·dpl_p·dpl_r > 0
+        @test opt.ϵ[3, 1] == 0.0
+        @test opt.ζ[3, 1] == 0.0
+
+        # Scalar default still returns empty Greek slots
+        opt_scalar = layer_optics(layer, [500.0]; ℓ_max = 4)
+        @test isempty(opt_scalar.α)
+    end
+
     @testset "OceanLayer with fluorophores (Phase 2)" begin
         cdom  = CDOM{Float64}(a_ref = 0.1)
         phyto = Phytoplankton{Float64, Bricaud1998}(Chl = 0.5)
