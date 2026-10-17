@@ -7,28 +7,27 @@ its `unified-vsmartmom` branch. It is the reference a future
 solver-side adapter author should read before writing the
 `OceanOptics → CoreScatteringOpticalProperties` bridge.
 
-**Bottom line: all optical-property conventions match exactly.** Two
-translation details are noted below — a unit conversion (nm ↔ μm) and
-a shape adaptation (2D matrix → per-band 1D vector).
+**Bottom line:** the per-layer optical quantities (`τ`, `ϖ`) and the
+Greek-coefficient layout, indexing and Rayleigh values match. Three
+translation details are noted below — spectral units (OceanOptics nm,
+vSmartMOM core RT cm⁻¹), a shape adaptation (2D matrix → per-wavelength
+1D vector), and vertical composition, which vSmartMOM performs by
+adding, not by an operator on optical-property objects.
+
+!!! note "Re-checked 2026-10-16"
+    Sections 1, 4, 5 and 6 were re-checked against the vSmartMOM release
+    candidate `d441061` (October 2026). The original April 2026 audit
+    described `Base.:*` as vertical stacking and vSmartMOM's spectral unit
+    as μm (true only for its Mie inputs); both are corrected below.
 
 ## Convention-by-convention
 
 ### 1. `CoreScatteringOpticalProperties` fields — **match**
 
-From `src/CoreRT/types.jl:798-822`:
-
-```julia
-Base.@kwdef struct CoreScatteringOpticalProperties{FT,FT2,FT3} <: AbstractOpticalProperties
-    "Absorption optical depth (scalar or wavelength dependent)"
-    τ::FT
-    "Single scattering albedo"
-    ϖ::FT2
-    "Z scattering matrix (forward)"
-    Z⁺⁺::FT3
-    "Z scattering matrix (backward)"
-    Z⁻⁺::FT3
-end
-```
+`CoreScatteringOpticalProperties` (vSmartMOM `src/CoreRT/types.jl`)
+carries `τ`, `ϖ`, the forward/backward phase operators `Z⁺⁺`, `Z⁻⁺`, and
+two optional direct-solar columns `Z₀⁺`, `Z₀⁻` used only by the
+external-solar path:
 
 - `τ` is **layer-integrated** `(a + b) · Δz`, matching our
   [`OceanLayerOptics`](@ref)`.τ`.
@@ -39,8 +38,8 @@ end
 
 ### 2. `GreekCoefs` mapping to the `B` matrix — **match**
 
-From `src/Scattering/types.jl:197-224` and
-`src/Scattering/mie_helper_functions.jl:579`:
+From vSmartMOM `src/Scattering/types.jl` (`GreekCoefs`) and
+`src/Scattering/mie_helper_functions.jl` (`construct_B_matrix`):
 
 ```julia
 construct_B_matrix(mod::Stokes_IQUV, ...) =
@@ -68,8 +67,8 @@ yields exactly vSmartMOM's expected 1D layout.
 
 OceanOptics.jl's [`phase_matrix_moments`](@ref) for
 [`RayleighWaterPhase`](@ref) is ported verbatim from vSmartMOM's
-`get_greek_rayleigh` at
-`src/Scattering/mie_helper_functions.jl:454-468`:
+`get_greek_rayleigh` (`src/Scattering/mie_helper_functions.jl`), including
+the Hovenier-positive `γ₂`:
 
 ```julia
 dpl_p = (1 - ρ)  / (1 + ρ/2)
@@ -81,39 +80,42 @@ dpl_r = (1 - 2ρ) / (1 - ρ)
 ϵ[ℓ] = ζ[ℓ] = 0
 ```
 
-### 5. Pipeline composition operators — **match**
+### 5. Composition operators — **different roles**
 
-vSmartMOM composes `CoreScatteringOpticalProperties` with
-`Base.:+` for per-wavelength / per-material spectral mixing and
-`Base.:*` for vertical stacking across layers
-(`src/CoreRT/LayerOpticalProperties/compEffectiveLayerProperties.jl:20-45`).
-OceanOptics.jl's [`IOP`](@ref) uses the same `+` semantics for
-constituent mixing, and its layers already arrive as independent
-`OceanLayerOptics` values that stack naturally.
+vSmartMOM's `Base.:+` on `CoreScatteringOpticalProperties` mixes
+components *within one layer*: optical depths add, and `ϖ` and the phase
+operators are weighted by each component's `τ·ϖ`. That is the same
+scattering-weighted mixing [`layer_optics`](@ref) applies to constituents
+(and [`IOP`](@ref) `+` applies to coefficients).
+
+vSmartMOM's `Base.:*` does **not** stack layers vertically: it
+concatenates spectral points (`[x.τ; y.τ]`, phase operators along the
+third dimension). Vertical composition happens in the RT kernel's adding
+(interaction) step. An ocean column therefore enters the solver as a
+sequence of layers for adding — separately from the atmosphere, below a
+refracting air–water interface — never through `*`.
 
 ## Translation details (not mismatches)
 
-### 6. Wavelength units — OceanOptics uses **nm**, vSmartMOM uses **μm**
+### 6. Spectral units — OceanOptics uses **nm**, vSmartMOM core RT uses **cm⁻¹**
 
-This is the ocean-optics vs atmospheric-RT unit-system split; both are
-standard in their own communities. The adapter must divide wavelength
-by 1000 when handing values into vSmartMOM:
+vSmartMOM's RT spectral grids are wavenumbers in cm⁻¹ (its Mie code
+takes wavelengths in μm). The adapter evaluates OceanOptics on the
+wavelengths `λ = 10⁷ / ν` nm of the solver's wavenumber grid:
 
 ```julia
-# At the integration boundary:
-core = CoreScatteringOpticalProperties(
-    τ   = opt.τ[iλ],
-    ϖ   = opt.ϖ[iλ],
-    Z⁺⁺ = …,
-    Z⁻⁺ = …,
-)
-# …or convert the OceanOptics wavelength grid up front:
-λ_μm = opt.λ ./ 1000
+λ_nm = 1e7 ./ ν_cm⁻¹          # decreasing when ν is increasing
+opt  = layer_optics(layer, λ_nm; ℓ_max)
 ```
 
-OceanOptics.jl deliberately keeps nm internally because every ocean-
-optics data table (Pope-Fry, Smith-Baker, Bricaud, Mason-Cone-Fry,
-Pegau, Petzold) is tabulated in nm.
+[`OceanLayerOptics`](@ref) accepts strictly decreasing wavelength grids,
+so the bundle can be built directly in the solver's order. Per-nm
+spectral densities (`J_source`, inelastic redistribution) additionally
+need the Jacobian `|dλ/dν| = 10⁷/ν²` and the solver's bin weights.
+
+OceanOptics.jl keeps nm internally because every ocean-optics data table
+(Pope-Fry, Smith-Baker, Bricaud, Mason-Cone-Fry, Pegau, Petzold) is
+tabulated in nm.
 
 ### 7. Greek-coefficient shape: 2D `(ℓ+1, nλ)` vs per-band 1D vector
 
@@ -141,15 +143,19 @@ gc = GreekCoefs(
 `src/CoreRT/types.jl` currently defines `CoxMunkSurface` (wind-
 roughened BRDF) but no ocean-scattering-layer surface type. The DESIGN
 memo (§10, Phase 3) places this work on the vSmartMOM side, not here:
-the `OceanSurface` would consume `OceanLayerOptics` bundles and hand
-them to the existing CoreRT pipeline alongside the atmospheric layers
-via `Base.:*`. Implementing it is solver-side work outside this
-repository's scope.
+an ocean boundary would solve the water column (from `OceanLayerOptics`
+bundles) and its bottom internally, couple it to the atmosphere through
+the four reflection/transmission blocks of a refracting air–water
+interface, and present the result to the atmospheric adding step.
+Implementing it is solver-side work outside this repository's scope.
 
 ## Adapter skeleton
 
-For reference, the concrete adapter a solver-side PR would provide
-(pseudocode; lives in vSmartMOM, not here):
+Illustrative pseudocode for the per-layer part of a solver-side adapter
+(lives in vSmartMOM, not here). Function names on the vSmartMOM side are
+placeholders; check the current API — e.g. its phase operators are built
+per Fourier moment by `Scattering.compute_Z_moments`. A polarized solver
+must check [`is_polarized`](@ref)`(opt)` before reading `α…ζ`.
 
 ```julia
 function core_scattering_from_ocean(opt::OceanLayerOptics,
@@ -180,7 +186,8 @@ build the `OceanRS <: AbstractRamanType` the solver expects.
 
 ## When this audit was last verified
 
-- vSmartMOM branch `unified-vsmartmom`, as of April 2026.
+- vSmartMOM branch `unified-vsmartmom`, as of April 2026; sections 1,
+  4, 5 and 6 re-checked against release candidate `d441061`, October 2026.
 - OceanOptics.jl commit `c7359da` (Phase 4 polarized-Rayleigh +
   Documenter).
 

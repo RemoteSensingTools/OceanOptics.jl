@@ -42,10 +42,12 @@ current release ships:
   `IsotropicFluorescence`, `CDOMFluorescence`, `WaterRaman`, plus
   `chlorophyll_fluorescence(phyto)` with Fell (1997) defaults.
 
-Phase 3 (coupled RT with `OceanSurface <: AbstractSurfaceType`) lives
-in `vSmartMOM.jl`, not here. Phase 4 (polarized Greek-coefficient
-expansion, `OceanColumn` + Fell-grid helper, artifact-based data
-loading, JOSS paper) is the remaining in-repo scope. See DESIGN §10.
+- `OceanColumn` with `uniform_column` / `fell_column` helpers, the
+  polarized Greek expansion of `RayleighWaterPhase`, and exact tabulated
+  inputs (`TabulatedAbsorber`, `TabulatedScatterer`,
+  `TabulatedGreekPhase`) for published benchmark cases.
+
+Coupled atmosphere–ocean RT lives in `vSmartMOM.jl`, not here.
 
 ## Install
 
@@ -99,13 +101,15 @@ under `[deps]` or `[weakdeps]`; adapters live on the solver side.
 
 The stable contract is:
 
-* **`OceanLayerOptics{FT}`** — per-layer bundle with fields `λ`
-  (`[nm]`), `Δz` (`[m]`), `τ`, `ϖ`, `B`, and `β` (Legendre moments,
-  indexed `[ℓ+1, λ]`). Optional polarized Greek elements α, γ, δ,
-  ϵ, ζ follow the same `[ℓ+1, λ]` layout when populated.
-* **`layer_optics(layer::OceanLayer, λ_grid; ℓ_max)`** — the
+* **`OceanLayerOptics{FT}`** — validated per-layer bundle with fields
+  `λ` (`[nm]`), `Δz` (`[m]`), `τ`, `ϖ`, `B`, and `β` (Legendre moments,
+  indexed `[ℓ+1, λ]`, `β₀ = 1`). Polarized bundles carry all of α, γ,
+  δ, ϵ, ζ in the same layout (`is_polarized`).
+* **`layer_optics(layer::OceanLayer, λ_grid; ℓ_max, polarized)`** — the
   single entry point that produces an `OceanLayerOptics` from a
-  biogeochemical state.
+  biogeochemical state or tabulated inputs. Polarized output requires an
+  actual phase matrix for every scatterer, or the explicit
+  `scalar_phase_approximation = :depolarizing`.
 * **`AbstractOceanInelasticProcess{FT}`** hierarchy and its trait
   functions `excitation_absorption(p, λ')`, `emission(p, λ', λ)`,
   `excitation_range(p)`, `is_isotropic(p)`,
@@ -116,6 +120,8 @@ The stable contract is:
   — per-layer list of active inelastic processes.
 
 Any API surface outside the above list is internal and may change.
+Units, conventions and validation rules are documented on the docs'
+*Consumer API* page.
 
 ## Automatic differentiation
 

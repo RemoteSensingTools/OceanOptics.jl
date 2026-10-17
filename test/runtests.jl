@@ -12,7 +12,9 @@ using ForwardDiff
     include("test_redistribution.jl")
     include("test_fluorescence.jl")
     include("test_raman.jl")
+    include("test_tabulated.jl")
     include("test_layer.jl")
+    include("test_layer_optics_contract.jl")
     include("test_column.jl")
     include("test_ad.jl")
 end

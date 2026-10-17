@@ -67,15 +67,28 @@ using QuadGK
         end
     end
 
-    @testset "Scalar phase_matrix_moments fallback" begin
-        # Non-polarizable phase functions should populate β from the
-        # scalar moments and zero the other five Greek slots.
+    @testset "Scalar-only phase functions have no implicit phase matrix" begin
+        # A scalar β sequence does not determine α, γ, δ, ϵ, ζ, so
+        # phase_matrix_moments refuses; the completely depolarizing
+        # approximation must be requested by name.
         hg = HenyeyGreensteinPhase{Float64}(g = 0.7)
-        m  = phase_matrix_moments(hg, 6)
+        @test !is_polarizable(hg)
+        @test_throws ArgumentError phase_matrix_moments(hg, 6)
+        @test_throws ArgumentError phase_matrix_moments(FournierForandPhase{Float64}(), 6)
+
+        m = depolarizing_phase_matrix_moments(hg, 6)
         @test m.β == phase_function_moments(hg, 6)
         @test all(iszero, m.α) && all(iszero, m.γ) && all(iszero, m.δ)
         @test all(iszero, m.ϵ) && all(iszero, m.ζ)
-        @test !is_polarizable(hg)
+    end
+
+    @testset "Wavelength-aware forms default to the λ-independent ones" begin
+        hg = HenyeyGreensteinPhase{Float64}(g = 0.7)
+        rw = RayleighWaterPhase{Float64}()
+        @test !is_wavelength_dependent(hg)
+        @test phase_function_moments(hg, 6, 550.0) == phase_function_moments(hg, 6)
+        @test backscatter_fraction(hg, 550.0) == backscatter_fraction(hg)
+        @test phase_matrix_moments(rw, 4, 550.0) == phase_matrix_moments(rw, 4)
     end
 
     @testset "Henyey-Greenstein closed form (de Haan convention)" begin

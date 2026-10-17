@@ -82,7 +82,7 @@ For a longer walk-through with numerical output, see
   [`PetzoldPhase`](@ref). See [Phase functions](@ref).
 * **Inelastic processes**: [`IsotropicFluorescence`](@ref),
   [`CDOMFluorescence`](@ref), [`WaterRaman`](@ref). See
-  [Inelastic](@ref).
+  [Inelastic processes](@ref).
 * **Layer + column**: [`OceanLayer`](@ref), [`OceanColumn`](@ref),
   `fell_column`, `uniform_column`. See [Types](@ref).
 * **Data loading**: [`SpectralTable`](@ref), [`linterp`](@ref),

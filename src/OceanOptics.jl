@@ -8,19 +8,22 @@ the primary consumer is `vSmartMOM.jl`'s `OceanSurface`, but any
 plane-parallel code (HydroLight-style, Monte Carlo, SOS) can consume
 the same output.
 
-# Phase 1 scope (this release)
+# Scope
 
-This first release covers the **elastic** optical path end-to-end:
-
-- `PureWater` with choice of absorption model (Pope-Fry, Smith-Baker,
-  Mason-Cone-Fry, or a combined piecewise) and scattering model
-  (Morel or Zhang-Hu)
-- `FournierForandPhase` for ocean particles (Mobley 2002
-  parameterization), `RayleighWaterPhase` for molecular water
-- Generic Legendre-moment machinery (`phase_function_moments`) that
-  works for any `AbstractOceanPhaseFunction`
+- Constituents: `PureWater` (Pope-Fry, Smith-Baker or combined
+  absorption; Morel or Zhang-Hu scattering), `CDOM`, `Phytoplankton`,
+  `NonAlgalParticles`, and exact tabulated inputs (`TabulatedAbsorber`,
+  `TabulatedScatterer`)
+- Phase functions: `RayleighWaterPhase` (with its polarized Greek
+  expansion), `FournierForandPhase`, `HenyeyGreensteinPhase`,
+  `PetzoldPhase`, `TabulatedGreekPhase`
 - `layer_optics(layer, λ)` — the main user entry point producing a
-  complete `OceanLayerOptics` bundle
+  validated `OceanLayerOptics` bundle
+- Inelastic process kernels (fluorescence, water Raman) for a downstream
+  two-pass solver
+
+The consumer contract (units, conventions, validation) is documented on
+the *Consumer API* docs page.
 """
 module OceanOptics
 
@@ -53,6 +56,7 @@ include("phase/fournier_forand.jl")
 include("phase/rayleigh_water.jl")
 include("phase/henyey_greenstein.jl")
 include("phase/petzold.jl")
+include("phase/tabulated_greek.jl")
 
 # -----------------------------------------------------------------------------
 # Materials
@@ -61,6 +65,7 @@ include("materials/pure_water.jl")
 include("materials/cdom.jl")
 include("materials/phytoplankton.jl")
 include("materials/nap.jl")
+include("materials/tabulated.jl")
 
 # -----------------------------------------------------------------------------
 # Inelastic processes (fluorescence, Raman)
@@ -91,20 +96,24 @@ export AbstractPureWaterScatteringModel, Morel1974, ZhangHu2009
 export CDOM, AbstractCDOMModel, BricaudMorelPrieur1981
 export Phytoplankton, AbstractPhytoplanktonModel, Bricaud1998, Gordon1992
 export NonAlgalParticles, AbstractNAPModel, BabinBricaud2003, FellMineral
+export TabulatedAbsorber, TabulatedScatterer
 
 # Phase functions
 export FournierForandPhase, RayleighWaterPhase, HenyeyGreensteinPhase, PetzoldPhase
+export TabulatedGreekPhase
 
 # Bundles
 export IOP, OceanLayer, OceanColumn, OceanLayerOptics
-export thickness, midpoint_depth, n_moments, n_wavelengths
+export thickness, midpoint_depth, n_moments, n_wavelengths, is_polarized
 export n_layers, bottom_depth, midpoint_depths, layer_thicknesses
 export uniform_column, fell_column
 
 # Core methods
 export absorption, scattering, backscattering, attenuation, phase_function
+export is_total_absorption
 export phase_function_value, phase_function_moments, phase_matrix_moments
-export backscatter_fraction, asymmetry_parameter, is_polarizable
+export depolarizing_phase_matrix_moments
+export backscatter_fraction, asymmetry_parameter, is_polarizable, is_wavelength_dependent
 export single_scattering_albedo
 export layer_optics, mix_phase_moments
 

@@ -99,6 +99,10 @@ end
 phase_function_moments(pf::AbstractOceanPhaseFunction, ℓ_max::Integer) =
     numerical_moments(pf, ℓ_max)
 
+# Wavelength-aware form; only `is_wavelength_dependent` phase functions use λ.
+phase_function_moments(pf::AbstractOceanPhaseFunction, ℓ_max::Integer, λ::Real) =
+    phase_function_moments(pf, ℓ_max)
+
 """
     mix_phase_moments(scatterings, phase_moments) -> Vector{FT}
 

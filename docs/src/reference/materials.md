@@ -35,6 +35,17 @@ BabinBricaud2003
 FellMineral
 ```
 
+## Tabulated constituents
+
+Exact published coefficients, without an empirical model; see
+[Consumer API](@ref) for the absorption-scope rule.
+
+```@docs
+TabulatedAbsorber
+TabulatedScatterer
+is_total_absorption
+```
+
 ## Shared traits
 
 ```@docs

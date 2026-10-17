@@ -66,8 +66,15 @@ For expensive closed-form expansions, overloading both avoids redundant work.
   expansion `(α, β, γ, δ, ϵ, ζ)` is available via
   [`phase_matrix_moments`](@ref). Default `false`.
 - `phase_matrix_moments(pf, ℓ_max) -> NamedTuple{(:α, :β, :γ, :δ, :ϵ, :ζ)}`
-  — full polarized expansion. Default: β from `phase_function_moments`
-  and zeros elsewhere (scalar fallback).
+  — full polarized expansion. Required when `is_polarizable(pf)`; there
+  is no implicit scalar fallback. The completely depolarizing
+  approximation is available only explicitly, through
+  [`depolarizing_phase_matrix_moments`](@ref).
+- `is_wavelength_dependent(pf) -> Bool` — whether the expansion changes
+  with wavelength. Such phase functions implement the three-argument
+  forms `phase_function_moments(pf, ℓ_max, λ)`,
+  `phase_matrix_moments(pf, ℓ_max, λ)` and `backscatter_fraction(pf, λ)`;
+  for all others these forms ignore `λ`. Default `false`.
 """
 abstract type AbstractOceanPhaseFunction{FT<:AbstractFloat} end
 
@@ -108,6 +115,7 @@ function phase_function_moments end
 
 """
     phase_matrix_moments(pf, ℓ_max) -> NamedTuple
+    phase_matrix_moments(pf, ℓ_max, λ) -> NamedTuple
 
 Return the polarized scattering-matrix Greek coefficients
 `(α, β, γ, δ, ϵ, ζ)` as a `NamedTuple` of length-`ℓ_max+1` vectors.
@@ -120,20 +128,56 @@ B = [β  γ   0   0
      0  0  -ϵ   δ]
 ```
 
-(Sanghavi 2014 Eq. 16; de Haan 1987 §2). The default implementation
-promotes the scalar `phase_function_moments` into `β` and zeros the
-other five — the right behavior for phase functions that are scalar-
-only (Fournier-Forand, Henyey-Greenstein, Petzold). Subtypes with
-closed-form polarized expansions (e.g. `RayleighWaterPhase`) should
-override.
+(Sanghavi 2014 Eq. 16; de Haan 1987 §2), with the Hovenier sign
+convention for `γ` used by vSmartMOM (`γ₂ > 0` for Rayleigh).
+
+Only phase functions with `is_polarizable(pf) == true` implement this
+(e.g. `RayleighWaterPhase`, or a [`TabulatedGreekPhase`](@ref) carrying
+all six coefficients). For scalar-only phase functions (Fournier-Forand,
+Henyey-Greenstein, Petzold) a scalar `β_ℓ` sequence does not determine
+the other five coefficients, so this throws an `ArgumentError`; use
+[`depolarizing_phase_matrix_moments`](@ref) to select the completely
+depolarizing approximation explicitly.
 """
-function phase_matrix_moments(pf::AbstractOceanPhaseFunction{FT},
-                              ℓ_max::Integer) where {FT}
-    β = phase_function_moments(pf, ℓ_max)
-    N = length(β)
-    z = zeros(FT, N)
+function phase_matrix_moments(pf::AbstractOceanPhaseFunction, ℓ_max::Integer)
+    is_polarizable(pf) &&
+        throw(ArgumentError("$(nameof(typeof(pf))) declares `is_polarizable` but does " *
+                            "not implement `phase_matrix_moments`"))
+    throw(_scalar_only_error(pf))
+end
+
+_scalar_only_error(pf::AbstractOceanPhaseFunction) =
+    ArgumentError("$(nameof(typeof(pf))) is scalar-only: its phase function does not " *
+                  "determine the polarized Greek coefficients α, γ, δ, ϵ, ζ. Supply a " *
+                  "full phase matrix (e.g. `TabulatedGreekPhase`) or select the " *
+                  "completely depolarizing approximation explicitly with " *
+                  "`depolarizing_phase_matrix_moments`.")
+
+phase_matrix_moments(pf::AbstractOceanPhaseFunction, ℓ_max::Integer, λ::Real) =
+    phase_matrix_moments(pf, ℓ_max)
+
+"""
+    depolarizing_phase_matrix_moments(pf, ℓ_max[, λ]) -> NamedTuple
+
+Explicit *completely depolarizing* approximation to the phase matrix of a
+scalar-only phase function: `β` from [`phase_function_moments`](@ref) and
+`α = γ = δ = ϵ = ζ = 0`. The corresponding scattering matrix is
+`diag(p(Θ), 0, 0, 0)`: scattered light is unpolarized and its intensity
+does not depend on the incident polarization.
+
+This is a modelling choice, not the polarization behavior of real
+particles; benchmarks with prescribed particle Mueller matrices (e.g.
+Chowdhary et al. 2020 AOS-IV) need the actual phase matrix instead.
+"""
+depolarizing_phase_matrix_moments(pf::AbstractOceanPhaseFunction, ℓ_max::Integer) =
+    _depolarizing_matrix(pf, phase_function_moments(pf, ℓ_max))
+depolarizing_phase_matrix_moments(pf::AbstractOceanPhaseFunction, ℓ_max::Integer, λ::Real) =
+    _depolarizing_matrix(pf, phase_function_moments(pf, ℓ_max, λ))
+
+function _depolarizing_matrix(::AbstractOceanPhaseFunction{FT}, β) where {FT}
+    z = zeros(FT, length(β))
     return (α = copy(z), β = β, γ = copy(z),
-            δ = copy(z), ϵ = copy(z), ζ = copy(z))
+            δ = copy(z), ϵ = copy(z), ζ = z)
 end
 
 """
@@ -157,6 +201,8 @@ function backscatter_fraction(pf::AbstractOceanPhaseFunction{FT}) where {FT}
     return B / 2   # the outer 1/2 from the definition
 end
 
+backscatter_fraction(pf::AbstractOceanPhaseFunction, λ::Real) = backscatter_fraction(pf)
+
 """
     asymmetry_parameter(pf) -> FT
 
@@ -175,6 +221,17 @@ Whether the phase function provides the full polarized scattering-matrix
 expansion (α, β, γ, δ, ϵ, ζ). Default `false` — only β available.
 """
 is_polarizable(::AbstractOceanPhaseFunction) = false
+
+"""
+    is_wavelength_dependent(pf) -> Bool
+
+Whether the phase function's expansion depends on wavelength. Such phase
+functions must be queried through the three-argument forms
+`phase_function_moments(pf, ℓ_max, λ)`, `phase_matrix_moments(pf, ℓ_max, λ)`
+and `backscatter_fraction(pf, λ)`; [`layer_optics`](@ref) then evaluates
+them at every wavelength instead of once per layer. Default `false`.
+"""
+is_wavelength_dependent(::AbstractOceanPhaseFunction) = false
 
 # -----------------------------------------------------------------------------
 # Internal utilities
@@ -204,4 +261,27 @@ function _reconstruct_from_moments(β::AbstractVector{FT}, μ::FT) where {FT}
         end
     end
     return p
+end
+
+"""
+    _backscatter_fraction_from_moments(β) -> FT
+
+Backscatter fraction `B = (1/2)∫₋₁⁰ p(μ) dμ` of the finite expansion
+`p(μ) = Σₗ βₗ Pₗ(μ)`, evaluated exactly term by term:
+
+```
+B = (1/2) [β₀ − Σ_{ℓ odd} βₗ Iₗ],   Iₗ = ∫₀¹ Pₗ dμ = (P_{ℓ-1}(0) − P_{ℓ+1}(0)) / (2ℓ+1)
+```
+
+(even orders ℓ ≥ 2 integrate to zero over a hemisphere).
+"""
+function _backscatter_fraction_from_moments(β::AbstractVector{FT}) where {FT}
+    s = β[1]
+    P_prev = one(FT)                  # P_{ℓ-1}(0) for ℓ = 1
+    for ℓ in 1:2:length(β)-1
+        P_next = -FT(ℓ) / FT(ℓ + 1) * P_prev   # P_{ℓ+1}(0) = -ℓ/(ℓ+1) P_{ℓ-1}(0)
+        s -= β[ℓ + 1] * (P_prev - P_next) / FT(2ℓ + 1)
+        P_prev = P_next
+    end
+    return s / 2
 end

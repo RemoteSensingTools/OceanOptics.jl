@@ -3,7 +3,7 @@
 Foundational type spine — the abstract hierarchy, the volumetric IOP
 bundle, and the layer / column containers. Phase-function and
 inelastic-process abstract types are cross-referenced from
-[Phase functions](@ref) and [Inelastic](@ref); material-model tags
+[Phase functions](@ref) and [Inelastic processes](@ref); material-model tags
 from [Materials](@ref).
 
 ## Abstract constituent hierarchy
@@ -43,5 +43,6 @@ fell_column
 OceanLayerOptics
 n_moments
 n_wavelengths
+is_polarized
 layer_optics
 ```

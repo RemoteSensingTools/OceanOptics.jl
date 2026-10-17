@@ -2,9 +2,8 @@
 # OceanLayer — one homogeneous vertical slab
 # =============================================================================
 #
-# Minimal Phase-1 implementation. An OceanColumn (stack with contiguity
-# validation + Fell-grid helpers) will be added in Phase 2 when vSmartMOM
-# needs to drive a stack through adding-doubling.
+# One homogeneous slab. Stacks of contiguous layers are `OceanColumn`s
+# (ocean_column.jl).
 # =============================================================================
 
 """

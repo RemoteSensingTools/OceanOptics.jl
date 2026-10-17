@@ -6,6 +6,52 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed — consumer contract (breaking)
+
+- `OceanLayerOptics` validates every bundle at construction: strictly
+  monotone (increasing or decreasing), finite, positive wavelengths;
+  `Δz > 0`; `τ ≥ 0`; `ϖ, B ∈ [0, 1]`; finite coefficients; `β₀ = 1`
+  within `√eps`; `|β_ℓ| ≤ 2ℓ+1`; non-negative `J_source`; matching array
+  types; `α, γ, ϵ, ζ` zero at `ℓ < 2`. Polarized bundles must carry all
+  five of `α, γ, δ, ϵ, ζ`; partial bundles previously passed and looked
+  polarized. Checks run at construction only; mutating the arrays
+  afterwards is not re-checked. The element type is not restricted, so
+  differentiable (e.g. ForwardDiff `Dual`) bundles still construct.
+- `phase_matrix_moments` no longer returns an implicit completely
+  depolarizing matrix for scalar-only phase functions (Fournier-Forand,
+  Henyey-Greenstein, Petzold); it throws. The approximation is available
+  explicitly as `depolarizing_phase_matrix_moments`.
+- `layer_optics(...; polarized = true)` throws when a scatterer has a
+  scalar-only phase function, unless `scalar_phase_approximation =
+  :depolarizing` is passed.
+
+### Added — tabulated inputs
+
+- `TabulatedAbsorber`, `TabulatedScatterer`: exact published
+  coefficients at exact wavelengths (no interpolation), with provenance.
+  `TabulatedAbsorber(...; total = true)` marks bulk absorption;
+  `layer_optics` then rejects any other absorbing constituent so water or
+  CDOM cannot be counted twice. `is_total_absorption` trait.
+- `TabulatedGreekPhase`: scalar or full Greek-coefficient phase
+  functions, wavelength independent or tabulated per wavelength, with
+  explicit opt-in `normalize`. Backscatter fraction evaluated exactly
+  from the (finite) expansion; tables whose expansion gives `B ∉ [0, 1]`
+  are rejected.
+- Wavelength-aware phase interface: `is_wavelength_dependent` and the
+  three-argument `phase_function_moments(pf, ℓ_max, λ)`,
+  `phase_matrix_moments(pf, ℓ_max, λ)`, `backscatter_fraction(pf, λ)`;
+  `layer_optics` evaluates wavelength-dependent phases per wavelength.
+- `is_polarized` exported.
+
+### Fixed — documentation
+
+- Consumer API page now states units, phase normalization and expansion
+  convention, Greek layout and γ sign, polarization capability,
+  zero-scattering behavior, tabulated inputs and validity caveats.
+- vSmartMOM integration page: `Base.:*` concatenates spectral points (it
+  does not stack layers), and vSmartMOM's core RT spectral unit is cm⁻¹
+  (μm only for Mie).
+
 ### Added — Phase 4 (in progress)
 
 - `OceanColumn{FT}` — ordered, surface-anchored stack of `OceanLayer`s

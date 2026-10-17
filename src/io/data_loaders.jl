@@ -124,3 +124,38 @@ function load_spectral_csv(path::AbstractString; col_λ::Int = 1, col_y::Int = 2
     end
     return SpectralTable(λs, ys)
 end
+
+# -----------------------------------------------------------------------------
+# Exact-wavelength tables (no interpolation)
+# -----------------------------------------------------------------------------
+#
+# Tabulated benchmark inputs are defined only at their published
+# wavelengths. These helpers validate such grids and look wavelengths up
+# exactly — to a few ulps of the less precise of table and query, so that
+# range-generated grids such as `400:0.1:500` and Float32 queries of a
+# Float64 table still match. Any other wavelength is an error rather than
+# an interpolation.
+
+function _check_exact_λ_grid(λ::AbstractVector{<:Real}, who::AbstractString)
+    isempty(λ) && throw(ArgumentError("$who: empty wavelength grid"))
+    all(x -> isfinite(x) && x > zero(x), λ) ||
+        throw(ArgumentError("$who: wavelengths must be finite and positive"))
+    _is_strictly_increasing(λ) ||
+        throw(ArgumentError("$who: wavelengths must be strictly increasing"))
+    return nothing
+end
+
+function _exact_λ_index(λ_tab::AbstractVector{FT}, λ::Real,
+                        who::AbstractString) where {FT}
+    i   = searchsortedfirst(λ_tab, λ)
+    tol = 8 * _λ_match_eps(FT, λ)
+    for k in (i - 1, i)
+        checkbounds(Bool, λ_tab, k) && abs(λ_tab[k] - λ) ≤ tol * λ_tab[k] && return k
+    end
+    shown = join(first(λ_tab, 8), ", ") * (length(λ_tab) > 8 ? ", …" : "")
+    throw(ArgumentError("$who: λ = $λ nm is not a tabulated wavelength " *
+                        "(tabulated: $shown); exact-wavelength tables are not interpolated"))
+end
+
+_λ_match_eps(::Type{FT}, λ::AbstractFloat) where {FT} = max(eps(FT), eps(typeof(λ)))
+_λ_match_eps(::Type{FT}, ::Real) where {FT}          = eps(FT)
