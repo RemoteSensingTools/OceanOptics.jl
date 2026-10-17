@@ -40,7 +40,7 @@ be combined with separately modelled water or CDOM absorption.
 ## Install
 
 ```julia
-pkg> add https://github.com/RemoteSensingTools/OceanOptics.jl
+pkg> add OceanOptics
 ```
 
 ## Quick start

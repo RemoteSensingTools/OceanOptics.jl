@@ -6,6 +6,20 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-10-16
+
+First registered release. The entries below cover the development since
+the initial phases.
+
+### Packaging
+
+- Requires Julia ≥ 1.10. Runtime dependencies are DocStringExtensions,
+  FastGaussQuadrature and Interpolations (QuadGK, LinearAlgebra and Printf
+  were unused and are dropped; QuadGK remains a test dependency). Compat
+  bounds are tested at both ends (lowest versions on Julia 1.10; Julia
+  1.13), and Interpolations starts at 0.14.2, the first release with
+  `linear_interpolation`. TagBot and CompatHelper workflows added.
+
 ### Changed — solver-facing interface (breaking)
 
 The interface was redesigned for direct use by vSmartMOM's coupled
@@ -146,7 +160,7 @@ atmosphere–ocean solver; there are no compatibility shims.
   accordingly, `[weakdeps]` on vSmartMOM dropped. See
   [No solver deps feedback](#) for the architectural decision.
 
-## [0.1.0] — initial development
+## Initial development (not released)
 
 ### Added — Phase 2 (inelastic framework)
 

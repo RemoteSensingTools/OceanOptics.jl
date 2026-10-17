@@ -23,8 +23,6 @@ module OceanOptics
 using DocStringExtensions
 using FastGaussQuadrature: gausslegendre
 using Interpolations: linear_interpolation, Flat
-using LinearAlgebra
-using QuadGK: quadgk
 
 # -----------------------------------------------------------------------------
 # Type spine
