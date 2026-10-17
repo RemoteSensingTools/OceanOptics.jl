@@ -1,8 +1,9 @@
 using Documenter
 using OceanOptics
 
-# GR backend needs an off-screen target in headless CI
-ENV["GKSwstype"] = "100"
+# Interactive charts: `@example` blocks call `Main.DocCharts.linechart`,
+# rendered in the browser by docs/src/assets/oo_charts.js (Chart.js).
+include(joinpath(@__DIR__, "DocCharts.jl"))
 
 DocMeta.setdocmeta!(OceanOptics, :DocTestSetup, :(using OceanOptics); recursive = true)
 
@@ -13,12 +14,18 @@ makedocs(
     format   = Documenter.HTML(
         prettyurls = get(ENV, "CI", "false") == "true",
         canonical  = "https://RemoteSensingTools.github.io/OceanOptics.jl/",
-        assets     = String[],
+        assets     = ["assets/oo_charts.js"],
+        # Chart pages embed their data (JSON + table) and have no image
+        # fallback, so allow larger pages and example outputs.
+        size_threshold         = 400 * 2^10,
+        size_threshold_warn    = 250 * 2^10,
+        example_size_threshold = 96 * 2^10,
     ),
     pages    = [
         "Home"                 => "index.md",
         "End-to-end example"   => "example.md",
         "Gallery"              => "gallery.md",
+        "Comparison with HydroLight" => "hydrolight_comparison.md",
         "Consumer API"         => "consumer_api.md",
         "vSmartMOM integration audit" => "vsmartmom_integration.md",
         "Reference"            => [

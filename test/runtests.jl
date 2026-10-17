@@ -13,6 +13,7 @@ using ForwardDiff
     include("test_fluorescence.jl")
     include("test_raman.jl")
     include("test_tabulated.jl")
+    include("test_hydrolight_reference.jl")
     include("test_layer.jl")
     include("test_layer_optics_contract.jl")
     include("test_column.jl")

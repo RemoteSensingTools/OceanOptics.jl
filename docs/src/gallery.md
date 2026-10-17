@@ -1,30 +1,19 @@
 # Gallery
 
 Visual sanity checks of OceanOptics.jl outputs against the canonical
-published figures they should reproduce. All plots below are generated
-at documentation-build time from the actual package code — hit the
-source buttons on any figure and you'll see the same `@example` block
-that emitted the image.
+published figures they should reproduce. All charts below are generated
+at documentation-build time from the actual package code by the
+`@example` block shown above each one. They are interactive: hover for
+values, click a legend entry to hide a series, and open *Data table* for
+the plotted numbers.
 
 Each figure cites the published work it is intended to match. If you
 spot a qualitative disagreement with one of those references, it is a
 bug.
 
 ```@setup gallery
-using OceanOptics, Plots
-gr()
-default(
-    linewidth       = 2,
-    framestyle      = :box,
-    grid            = :on,
-    gridalpha       = 0.25,
-    titlefontsize   = 11,
-    guidefontsize   = 10,
-    tickfontsize    = 9,
-    legendfontsize  = 8,
-    size            = (640, 420),
-    dpi             = 120,
-)
+using OceanOptics
+using Main.DocCharts
 ```
 
 ## 1. Pure-water absorption, `a_w(λ)`
@@ -34,24 +23,28 @@ pure-water absorption curve on the Ocean Optics Web Book
 ["Absorption by pure water"](https://www.oceanopticsbook.info/view/absorption/absorption-by-pure-sea-water)
 page. Expect a pronounced minimum around 420 nm (≈ 0.005 m⁻¹), a
 steep rise into the NIR, and the characteristic water-vapor / O–H
-combination bands producing shoulders near 605 and 740 nm.
+combination bands producing shoulders near 605 and 740 nm. Each table
+is drawn only over its own range (Pope & Fry: 380–727.5 nm); outside it
+the interpolator returns the end value. See also the
+[Comparison with HydroLight IOPs](@ref).
 
 ```@example gallery
-λ = collect(350.0:2.0:800.0)
+λ   = collect(350.0:2.0:800.0)
+λpf = filter(x -> 380 ≤ x ≤ 727.5, λ)
 
 w_popefry  = PureWater{Float64}(absorption_model = PopeFry1997())
 w_smithb   = PureWater{Float64}(absorption_model = SmithBaker1981())
 w_combined = PureWater{Float64}(absorption_model = CombinedPopeFryMason())
 
-a_pf = [absorption(w_popefry,  λi) for λi in λ]
+a_pf = [absorption(w_popefry,  λi) for λi in λpf]
 a_sb = [absorption(w_smithb,   λi) for λi in λ]
 a_co = [absorption(w_combined, λi) for λi in λ]
 
-plot(λ, a_pf; label = "Pope & Fry 1997",      yscale = :log10,
-     xlabel = "wavelength λ [nm]", ylabel = "a_w(λ) [m⁻¹]",
-     title  = "Pure-water absorption")
-plot!(λ, a_sb; label = "Smith & Baker 1981",  linestyle = :dash)
-plot!(λ, a_co; label = "Combined (piecewise)", linestyle = :dot)
+linechart([Series("Pope & Fry 1997", λpf, a_pf),
+           Series("Smith & Baker 1981", λ, a_sb; dash = true),
+           Series("Combined (piecewise)", λ, a_co; dot = true)];
+          title = "Pure-water absorption", xlabel = "wavelength λ [nm]",
+          ylabel = "a_w(λ) [m⁻¹]", xname = "λ [nm]", ylog = true)
 ```
 
 ## 2. Pure-water scattering — Morel (1974) vs Zhang-Hu (2009)
@@ -75,11 +68,11 @@ b_mo = [scattering(w_morel,  λi) for λi in λ]
 b_zh = [scattering(w_zhh_38, λi) for λi in λ]
 b_zp = [scattering(w_zhh_00, λi) for λi in λ]
 
-plot(λ, b_mo; label = "Morel 1974",               yscale = :log10,
-     xlabel = "wavelength λ [nm]", ylabel = "b_w(λ) [m⁻¹]",
-     title  = "Pure (sea)water scattering")
-plot!(λ, b_zh; label = "Zhang-Hu 2009, S=38.4")
-plot!(λ, b_zp; label = "Zhang-Hu 2009, S=0 (pure)", linestyle = :dash)
+linechart([Series("Morel 1974", λ, b_mo),
+           Series("Zhang-Hu 2009, S = 38.4", λ, b_zh),
+           Series("Zhang-Hu 2009, S = 0 (pure)", λ, b_zp; dash = true)];
+          title = "Pure (sea)water scattering", xlabel = "wavelength λ [nm]",
+          ylabel = "b_w(λ) [m⁻¹]", xname = "λ [nm]", ylog = true)
 ```
 
 ## 3. Case-1 water IOPs at varying chlorophyll
@@ -105,18 +98,16 @@ function total_b(phyto)
     return [scattering(water, λi) + scattering(phyto, λi) for λi in λ]
 end
 
-pa = plot(xlabel = "wavelength λ [nm]", ylabel = "a(λ) [m⁻¹]",
-          title  = "Total absorption a = a_w + a_g + a_φ",
-          yscale = :log10)
-pb = plot(xlabel = "wavelength λ [nm]", ylabel = "b(λ) [m⁻¹]",
-          title  = "Total scattering b = b_w + b_p",
-          yscale = :log10)
-for Chl in Chls
-    phyto = Phytoplankton{Float64, Bricaud1998}(Chl = Chl)
-    plot!(pa, λ, total_a(phyto); label = "Chl = $Chl")
-    plot!(pb, λ, total_b(phyto); label = "Chl = $Chl")
-end
-plot(pa, pb; layout = (1, 2), size = (960, 420))
+phytos = [Phytoplankton{Float64, Bricaud1998}(Chl = Chl) for Chl in Chls]
+linechart([Series("Chl = $Chl mg/m³", λ, total_a(p)) for (Chl, p) in zip(Chls, phytos)];
+          title = "Total absorption a = a_w + a_g + a_φ", xlabel = "wavelength λ [nm]",
+          ylabel = "a(λ) [m⁻¹]", xname = "λ [nm]", ylog = true, ordinal = true)
+```
+
+```@example gallery
+linechart([Series("Chl = $Chl mg/m³", λ, total_b(p)) for (Chl, p) in zip(Chls, phytos)];
+          title = "Total scattering b = b_w + b_p", xlabel = "wavelength λ [nm]",
+          ylabel = "b(λ) [m⁻¹]", xname = "λ [nm]", ylog = true, ordinal = true)
 ```
 
 ## 4. Layer optics `τ, ϖ, B` for a 5-m Case-1 layer
@@ -137,16 +128,18 @@ layer = OceanLayer(0.0, 5.0,
                    AbstractOceanConstituent{Float64}[water, cdom, phyto])
 opt   = layer_optics(layer, λ; ℓ_max = 32)
 
-pτ = plot(opt.λ, opt.τ; label = false,
-          xlabel = "λ [nm]", ylabel = "τ(λ)",
-          title  = "Layer optical depth")
-pϖ = plot(opt.λ, opt.ϖ; label = false,
-          xlabel = "λ [nm]", ylabel = "ϖ(λ)",
-          title  = "Single-scattering albedo")
-pB = plot(opt.λ, opt.B; label = false,
-          xlabel = "λ [nm]", ylabel = "B(λ)",
-          title  = "Backscatter fraction")
-plot(pτ, pϖ, pB; layout = (1, 3), size = (1040, 320))
+linechart([Series("τ", opt.λ, opt.τ)]; title = "Layer optical depth",
+          xlabel = "λ [nm]", ylabel = "τ(λ)", xname = "λ [nm]", height = 300)
+```
+
+```@example gallery
+linechart([Series("ϖ", opt.λ, opt.ϖ)]; title = "Single-scattering albedo",
+          xlabel = "λ [nm]", ylabel = "ϖ(λ)", xname = "λ [nm]", height = 300)
+```
+
+```@example gallery
+linechart([Series("B", opt.λ, opt.B)]; title = "Backscatter fraction",
+          xlabel = "λ [nm]", ylabel = "B(λ)", xname = "λ [nm]", height = 300)
 ```
 
 ## 5. Phase-function comparison — Fournier-Forand vs Henyey-Greenstein vs Rayleigh-water
@@ -172,13 +165,13 @@ hg50 = [phase_function_value(pf_hg50, μi) for μi in μ]
 ray  = [phase_function_value(pf_ray,  μi) for μi in μ]
 
 θ_deg = rad2deg.(acos.(μ))
-plot(θ_deg, ff;   label = "Fournier-Forand, B = 0.018", yscale = :log10,
-     xlabel = "scattering angle θ [deg]",
-     ylabel = "p(θ)",
-     title  = "Phase functions for ocean scattering")
-plot!(θ_deg, hg95; label = "Henyey-Greenstein, g = 0.95")
-plot!(θ_deg, hg50; label = "Henyey-Greenstein, g = 0.50")
-plot!(θ_deg, ray;  label = "Rayleigh-water, ρ = 0.039")
+linechart([Series("Fournier-Forand, B = 0.018", θ_deg, ff),
+           Series("Henyey-Greenstein, g = 0.95", θ_deg, hg95),
+           Series("Henyey-Greenstein, g = 0.50", θ_deg, hg50),
+           Series("Rayleigh-water, ρ = 0.039", θ_deg, ray)];
+          title = "Phase functions for ocean scattering",
+          xlabel = "scattering angle θ [deg]", ylabel = "p(θ)", xname = "θ [deg]",
+          ylog = true, digits = 4)
 ```
 
 ## 6. Chlorophyll fluorescence emission spectrum
@@ -193,19 +186,18 @@ phyto = Phytoplankton{Float64, Bricaud1998}(Chl = 0.5)
 sif   = chlorophyll_fluorescence(phyto)
 
 λ_emit = collect(640.0:1.0:740.0)
-f_exc  = Dict(
-    "λ' = 400 nm" => [emission(sif, 400.0, λ) for λ in λ_emit],
-    "λ' = 500 nm" => [emission(sif, 500.0, λ) for λ in λ_emit],
-    "λ' = 600 nm" => [emission(sif, 600.0, λ) for λ in λ_emit],
-)
+f_exc  = [(λ′, [emission(sif, λ′, λ) for λ in λ_emit]) for λ′ in (400.0, 500.0, 600.0)]
 
-plot(xlabel = "emission wavelength λ [nm]",
-     ylabel = "f(λ', λ) [nm⁻¹]",
-     title  = "Chlorophyll fluorescence emission (Fell 1997, Fig. 5.5)")
-for (lab, y) in f_exc
-    plot!(λ_emit, y; label = lab)
-end
-vline!([685.0]; label = "peak = 685 nm", linestyle = :dash, color = :gray)
+# The three curves coincide (excitation-independent band); dashes keep
+# them distinguishable where they overlap.
+styles = ((dash = false, dot = false), (dash = true, dot = false), (dash = false, dot = true))
+linechart([[Series("λ' = $(Int(λ′)) nm", λ_emit, y; st...)
+            for ((λ′, y), st) in zip(f_exc, styles)];
+           Series("peak = 685 nm", [685.0, 685.0], [0.0, maximum(last(f_exc[1]))];
+                  reference = true, dot = true)];
+          title = "Chlorophyll fluorescence emission (Fell 1997, Fig. 5.5)",
+          xlabel = "emission wavelength λ [nm]", ylabel = "f(λ', λ) [nm⁻¹]",
+          xname = "λ [nm]")
 ```
 
 ## 7. Water Raman emission vs excitation wavelength
@@ -222,12 +214,9 @@ ram = WaterRaman{Float64}()
 λ_emit = collect(430.0:1.0:720.0)
 λ_excs = (400.0, 440.0, 500.0, 550.0)
 
-plot(xlabel = "emission wavelength λ [nm]",
-     ylabel = "f_R(λ', λ) [nm⁻¹]",
-     title  = "Water Raman emission — Stokes shift = 3400 cm⁻¹")
-for λ′ in λ_excs
-    f  = [emission(ram, λ′, λ) for λ in λ_emit]
-    λp = raman_peak_wavelength(ram, λ′)
-    plot!(λ_emit, f; label = "λ' = $(Int(round(λ′))) nm (peak $(round(λp; digits=0)) nm)")
-end
+linechart([Series("λ' = $(Int(round(λ′))) nm (peak $(round(Int, raman_peak_wavelength(ram, λ′))) nm)",
+                  λ_emit, [emission(ram, λ′, λ) for λ in λ_emit]) for λ′ in λ_excs];
+          title = "Water Raman emission — Stokes shift = 3400 cm⁻¹",
+          xlabel = "emission wavelength λ [nm]", ylabel = "f_R(λ', λ) [nm⁻¹]",
+          xname = "λ [nm]", ordinal = true)
 ```

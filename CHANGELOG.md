@@ -43,6 +43,21 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `layer_optics` evaluates wavelength-dependent phases per wavelength.
 - `is_polarized` exported.
 
+### Added — HydroLight IOP reference and interactive documentation
+
+- `data/reference/loisel2023_hydrolight_iops.csv`: pure-seawater IOPs and
+  three IOP scenarios from the HydroLight input database of Loisel et al.
+  (2023), Dryad doi:10.6076/D1630T (CC0), with provenance header.
+  `test/test_hydrolight_reference.jl` checks `ZhangHu2009` scattering at
+  18 °C, S = 35 (agreement ≤ 1e-4), Pope & Fry absorption over
+  420–725 nm, and the tabulated route against the bulk IOPs.
+- Docs page *Comparison with HydroLight IOPs*: the default pure-water
+  absorption differs from the IOCCG (2018) composite used by HydroLight
+  below 420 nm (Smith & Baker UV values, up to 6.5×) and above 700 nm.
+- Documentation charts are interactive (Chart.js through `docs/DocCharts.jl`
+  and `docs/src/assets/oo_charts.js`), with data tables and light/dark
+  palettes; Plots.jl is no longer a docs dependency.
+
 ### Fixed — documentation
 
 - Consumer API page now states units, phase normalization and expansion

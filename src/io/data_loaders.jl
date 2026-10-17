@@ -125,6 +125,31 @@ function load_spectral_csv(path::AbstractString; col_λ::Int = 1, col_y::Int = 2
     return SpectralTable(λs, ys)
 end
 
+"""
+    _read_csv_columns(path) -> Dict{String, Vector{Float64}}
+
+Read a provenance-commented, multi-column numeric CSV (as in `data/`): `#`
+comment lines are skipped, the first remaining line names the columns, and
+every following row must parse as numbers. Used for reference datasets
+such as `data/reference/loisel2023_hydrolight_iops.csv`.
+"""
+function _read_csv_columns(path::AbstractString)
+    lines  = filter(l -> !isempty(l) && !startswith(l, '#'), strip.(readlines(path)))
+    isempty(lines) && throw(ArgumentError("No header or data rows in $path"))
+    names  = String.(strip.(split(first(lines), ',')))
+    values = [Float64[] for _ in names]
+    for (k, line) in enumerate(lines[2:end])
+        fields = split(line, ',')
+        length(fields) == length(names) ||
+            throw(ArgumentError("$path: data row $k has $(length(fields)) fields, " *
+                                "expected $(length(names))"))
+        for (v, f) in zip(values, fields)
+            push!(v, parse(Float64, strip(f)))
+        end
+    end
+    return Dict(zip(names, values))
+end
+
 # -----------------------------------------------------------------------------
 # Exact-wavelength tables (no interpolation)
 # -----------------------------------------------------------------------------
