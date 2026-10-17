@@ -11,7 +11,7 @@
         @test scattering(p2, 550.0) ≈ 0.30 * 2.0^0.62  rtol=1e-12
 
         # Backscattering derives from the Fournier-Forand phase function
-        bf = backscatter_fraction(phase_function(p))
+        bf = backscatter_fraction(scattering_phase(p))
         @test backscattering(p, 550.0) ≈ scattering(p, 550.0) * bf
     end
 
@@ -40,6 +40,6 @@
 
         # Custom backscatter fraction routes into FF renormalization
         p = Phytoplankton{Float64, Bricaud1998}(Chl = 0.5, B = 0.015)
-        @test backscatter_fraction(phase_function(p)) ≈ 0.015 rtol=0.05
+        @test backscatter_fraction(scattering_phase(p)) ≈ 0.015 rtol=0.05
     end
 end

@@ -27,7 +27,7 @@ makedocs(
         "Gallery"              => "gallery.md",
         "Comparison with HydroLight" => "hydrolight_comparison.md",
         "Consumer API"         => "consumer_api.md",
-        "vSmartMOM integration audit" => "vsmartmom_integration.md",
+        "vSmartMOM integration" => "vsmartmom_integration.md",
         "Reference"            => [
             "Types"            => "reference/types.md",
             "Materials"        => "reference/materials.md",

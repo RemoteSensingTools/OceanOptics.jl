@@ -13,7 +13,7 @@
         @test scattering(nap, 886.0) ≈ 0.225 rtol=1e-12
 
         # Backscatter scales with the configured B
-        bf = backscatter_fraction(phase_function(nap))
+        bf = backscatter_fraction(scattering_phase(nap))
         @test backscattering(nap, 443.0) ≈ scattering(nap, 443.0) * bf
     end
 

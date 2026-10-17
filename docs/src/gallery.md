@@ -24,8 +24,8 @@ pure-water absorption curve on the Ocean Optics Web Book
 page. Expect a pronounced minimum around 420 nm (≈ 0.005 m⁻¹), a
 steep rise into the NIR, and the characteristic water-vapor / O–H
 combination bands producing shoulders near 605 and 740 nm. Each table
-is drawn only over its own range (Pope & Fry: 380–727.5 nm); outside it
-the interpolator returns the end value. See also the
+is drawn only over its own range (Pope & Fry: 380–727.5 nm); outside it a
+table has no data and OceanOptics throws. See also the
 [Comparison with HydroLight IOPs](@ref).
 
 ```@example gallery
@@ -34,15 +34,15 @@ the interpolator returns the end value. See also the
 
 w_popefry  = PureWater{Float64}(absorption_model = PopeFry1997())
 w_smithb   = PureWater{Float64}(absorption_model = SmithBaker1981())
-w_combined = PureWater{Float64}(absorption_model = CombinedPopeFryMason())
+w_ioccg    = PureWater{Float64}(absorption_model = IOCCG2018())
 
 a_pf = [absorption(w_popefry,  λi) for λi in λpf]
 a_sb = [absorption(w_smithb,   λi) for λi in λ]
-a_co = [absorption(w_combined, λi) for λi in λ]
+a_io = [absorption(w_ioccg,    λi) for λi in λ]
 
 linechart([Series("Pope & Fry 1997", λpf, a_pf),
            Series("Smith & Baker 1981", λ, a_sb; dash = true),
-           Series("Combined (piecewise)", λ, a_co; dot = true)];
+           Series("IOCCG 2018 + Kou 1993 (default)", λ, a_io; dot = true)];
           title = "Pure-water absorption", xlabel = "wavelength λ [nm]",
           ylabel = "a_w(λ) [m⁻¹]", xname = "λ [nm]", ylog = true)
 ```
@@ -50,10 +50,11 @@ linechart([Series("Pope & Fry 1997", λpf, a_pf),
 ## 2. Pure-water scattering — Morel (1974) vs Zhang-Hu (2009)
 
 Comparison target: Zhang, Hu & He (2009) Fig. 3 (seawater at S =
-38.4 ‰, T = 20 °C, 350–700 nm). Zhang-Hu sits 1 % below Morel's
-measurements on average across the visible, per the paper's abstract.
-Pure-water Morel 1974 overestimates seawater by ~ 30 % because it was
-calibrated on natural seawater.
+38.4 ‰, T = 20 °C, 350–700 nm), who report agreement with Morel's
+measurements to about 1 %. Morel's (1974) power-law fit for seawater runs
+somewhat above the Zhang-Hu model (7–16 % at 18 °C, S = 35; see the
+[Comparison with HydroLight IOPs](@ref)), and freshwater (S = 0)
+scatters roughly 30 % less than seawater.
 
 ```@example gallery
 λ = collect(350.0:5.0:700.0)
@@ -87,7 +88,7 @@ classical greening of `a(λ)` away from the pure-water blue minimum.
 λ   = collect(400.0:2.0:700.0)
 Chls = (0.03, 0.1, 0.3, 1.0, 3.0)
 
-water = PureWater{Float64}()           # CombinedPopeFryMason + Zhang-Hu
+water = PureWater{Float64}()           # IOCCG2018 + Zhang-Hu
 cdom  = CDOM{Float64}(a_ref = 0.03)
 
 function total_a(phyto)
@@ -128,17 +129,17 @@ layer = OceanLayer(0.0, 5.0,
                    AbstractOceanConstituent{Float64}[water, cdom, phyto])
 opt   = layer_optics(layer, λ; ℓ_max = 32)
 
-linechart([Series("τ", opt.λ, opt.τ)]; title = "Layer optical depth",
+linechart([Series("τ", opt.λ, optical_depth(opt))]; title = "Layer optical depth",
           xlabel = "λ [nm]", ylabel = "τ(λ)", xname = "λ [nm]", height = 300)
 ```
 
 ```@example gallery
-linechart([Series("ϖ", opt.λ, opt.ϖ)]; title = "Single-scattering albedo",
+linechart([Series("ϖ", opt.λ, single_scattering_albedo(opt))]; title = "Single-scattering albedo",
           xlabel = "λ [nm]", ylabel = "ϖ(λ)", xname = "λ [nm]", height = 300)
 ```
 
 ```@example gallery
-linechart([Series("B", opt.λ, opt.B)]; title = "Backscatter fraction",
+linechart([Series("B", opt.λ, backscatter_fraction(opt))]; title = "Backscatter fraction",
           xlabel = "λ [nm]", ylabel = "B(λ)", xname = "λ [nm]", height = 300)
 ```
 

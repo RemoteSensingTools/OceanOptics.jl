@@ -6,66 +6,98 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-### Changed — consumer contract (breaking)
+### Changed — solver-facing interface (breaking)
 
-- `OceanLayerOptics` validates every bundle at construction: strictly
-  monotone (increasing or decreasing), finite, positive wavelengths;
-  `Δz > 0`; `τ ≥ 0`; `ϖ, B ∈ [0, 1]`; finite coefficients; `β₀ = 1`
-  within `√eps`; `|β_ℓ| ≤ 2ℓ+1`; non-negative `J_source`; matching array
-  types; `α, γ, ϵ, ζ` zero at `ℓ < 2`. Polarized bundles must carry all
-  five of `α, γ, δ, ϵ, ζ`; partial bundles previously passed and looked
-  polarized. Checks run at construction only; mutating the arrays
-  afterwards is not re-checked. The element type is not restricted, so
-  differentiable (e.g. ForwardDiff `Dual`) bundles still construct.
-- `phase_matrix_moments` no longer returns an implicit completely
-  depolarizing matrix for scalar-only phase functions (Fournier-Forand,
-  Henyey-Greenstein, Petzold); it throws. The approximation is available
-  explicitly as `depolarizing_phase_matrix_moments`.
-- `layer_optics(...; polarized = true)` throws when a scatterer has a
-  scalar-only phase function, unless `scalar_phase_approximation =
-  :depolarizing` is passed.
+The interface was redesigned for direct use by vSmartMOM's coupled
+atmosphere–ocean solver; there are no compatibility shims.
 
-### Added — tabulated inputs
+- `layer_optics` returns a component-based `OceanLayerOptics`: absorption
+  optical depth `τ_abs` plus one `ScatteringComponent` per scattering
+  constituent (label, scattering optical depth, `GreekCoefficients` once
+  or per wavelength, backscatter fraction, polarization label `:scalar`,
+  `:full` or `:depolarizing`). Mixed quantities come from
+  `optical_depth`, `single_scattering_albedo`, `backscatter_fraction` and
+  `greek_expansion(o, iλ)`. Layers are validated at construction.
+- New `column_optics` → `OceanColumnOptics`: contiguous layers on one grid,
+  the interface refractive index and the bottom (`BlackBottom`,
+  `LambertianBottom`); both must be chosen explicitly. `interface_depths`.
+- Components store their distinct expansions plus a per-wavelength
+  `phase_index`, and a `phase_id`; each distinct expansion is computed
+  once, and `column_optics` shares expansions between layers.
+  `WavelengthDependentPhase(...; lookup = :nearest)` gives
+  band-representative phase matrices on fine spectral grids.
+- `GreekCoefficients` replaces the NamedTuple and matrix layouts: the
+  fields, order and signs of vSmartMOM's `GreekCoefs`, validated (`β₀ = 1`,
+  `|β_ℓ| ≤ 2ℓ+1`, zero `α, γ, ϵ, ζ` for `ℓ < 2`, all-or-none polarization).
+  `resize_moments`, `depolarized`, `mix_greek`, `evaluate_scattering_matrix`.
+- Phase interface: `greek_expansion(pf, ℓ_max[, λ]; polarized)` replaces
+  `phase_matrix_moments`; scalar-only phase functions throw for
+  `polarized = true` unless the completely depolarizing approximation is
+  chosen (`depolarizing_greek_expansion`, or
+  `layer_optics(...; scalar_phase_approximation = :depolarizing)`).
+  `phase_function(c)` is now `scattering_phase(c)`. These names no
+  longer collide with vSmartMOM's exports.
+- Expansions are integrated in the scattering angle on graded
+  Gauss-Legendre panels until converged, instead of a fixed rule in `μ`
+  followed by renormalization; `phase_function_moments` throws for a
+  phase function that is not normalized.
+- Every interpolated table throws a `DomainError` outside its data range
+  (previously clamped to the end values).
+- Dependency bounds include the versions vSmartMOM resolves to
+  (`FastGaussQuadrature` 0.4/0.5, `Interpolations` 0.16).
 
-- `TabulatedAbsorber`, `TabulatedScatterer`: exact published
-  coefficients at exact wavelengths (no interpolation), with provenance.
-  `TabulatedAbsorber(...; total = true)` marks bulk absorption;
-  `layer_optics` then rejects any other absorbing constituent so water or
-  CDOM cannot be counted twice. `is_total_absorption` trait.
-- `TabulatedGreekPhase`: scalar or full Greek-coefficient phase
-  functions, wavelength independent or tabulated per wavelength, with
-  explicit opt-in `normalize`. Backscatter fraction evaluated exactly
-  from the (finite) expansion; tables whose expansion gives `B ∉ [0, 1]`
-  are rejected.
-- Wavelength-aware phase interface: `is_wavelength_dependent` and the
-  three-argument `phase_function_moments(pf, ℓ_max, λ)`,
-  `phase_matrix_moments(pf, ℓ_max, λ)`, `backscatter_fraction(pf, λ)`;
-  `layer_optics` evaluates wavelength-dependent phases per wavelength.
-- `is_polarized` exported.
+### Fixed — physics
 
-### Added — HydroLight IOP reference and interactive documentation
+- Fournier-Forand: the closed form has a removable 0/0 where δ = 1
+  (θ ≈ 10° for n = 1.1); evaluated directly it returned values off by many
+  orders of magnitude close to that angle. A series in 1 − δ is used there.
+  Very small backscatter fractions now include the analytic forward tail
+  below the quadrature floor; `n` is restricted to (1, 1.5).
+- Fournier-Forand: the "renormalization" factor was a quadrature artifact
+  (the closed form is exactly normalized) that inflated `p` and `B` by up
+  to 0.3 % for small `B`; removed. The `B → (n, μ)` inversion now uses the
+  family of Mobley, Sundman & Boss (2002), `n = 1.01 + 0.1542 (μ − 3)`
+  (previously `μ = 3 + 20 (n − 1)`, a different forward-peak shape for the
+  same `B`); `B = 0.0183` gives their `n = 1.10, μ = 3.5835`.
+- Petzold: power-law (log–log) interpolation with power-law forward
+  extrapolation and accurate normalization, instead of linear-in-μ
+  interpolation, a flat forward peak and trapezoid normalization.
+- Pure-water absorption: the default `CombinedPopeFryMason` fell back to
+  Smith & Baker (4–6.5× too high below 380 nm) because the Mason, Cone &
+  Fry table is not bundled; it and `MasonConeFry2016` are removed. New
+  default `IOCCG2018` (the IOCCG 2018 composite used for HydroLight by
+  Loisel et al. 2023, 350–750 nm, continued with Kou et al. 1993 to
+  2500 nm) and `Kou1993`. The temperature correction is referenced to
+  each table's measurement temperature (22 °C; none for Smith & Baker)
+  instead of 20 °C.
+- Temperature correction: the bundled five-point `pegau_1997_temperature.csv`
+  ("condensed" digitization) missed the 740 nm O–H band, giving 0.0013
+  instead of ≈ 0.016 m⁻¹ K⁻¹ there and the wrong sign near 700 nm; replaced
+  by the Röttgers, McKee & Utschig (2014) coefficients (2 nm, 550–2500 nm,
+  CC BY 4.0).
 
-- `data/reference/loisel2023_hydrolight_iops.csv`: pure-seawater IOPs and
-  three IOP scenarios from the HydroLight input database of Loisel et al.
-  (2023), Dryad doi:10.6076/D1630T (CC0), with provenance header.
-  `test/test_hydrolight_reference.jl` checks `ZhangHu2009` scattering at
-  18 °C, S = 35 (agreement ≤ 1e-4), Pope & Fry absorption over
-  420–725 nm, and the tabulated route against the bulk IOPs.
-- Docs page *Comparison with HydroLight IOPs*: the default pure-water
-  absorption differs from the IOCCG (2018) composite used by HydroLight
-  below 420 nm (Smith & Baker UV values, up to 6.5×) and above 700 nm.
-- Documentation charts are interactive (Chart.js through `docs/DocCharts.jl`
-  and `docs/src/assets/oo_charts.js`), with data tables and light/dark
-  palettes; Plots.jl is no longer a docs dependency.
+### Added
 
-### Fixed — documentation
-
-- Consumer API page now states units, phase normalization and expansion
-  convention, Greek layout and γ sign, polarization capability,
-  zero-scattering behavior, tabulated inputs and validity caveats.
-- vSmartMOM integration page: `Base.:*` concatenates spectral points (it
-  does not stack layers), and vSmartMOM's core RT spectral unit is cm⁻¹
-  (μm only for Mie).
+- Tabulated inputs: `TabulatedAbsorber` (`total = true` for bulk
+  absorption; `layer_optics` then rejects other absorbers),
+  `TabulatedScatterer`, `TabulatedGreekPhase`, `TabulatedMuellerPhase`
+  (angular F(Θ) tables in the standard convention, monotone-cubic
+  interpolation, recorded normalization) and `WavelengthDependentPhase`.
+  The Chowdhary et al. (2020) AOS-IV hydrosol matrices expand to the
+  paper's asymmetry parameters and backscatter ratios.
+- Seawater refractive index: `FixedRefractiveIndex`, `QuanFry1995`
+  (relative to air, domain-checked).
+- `radiance_source_kernel` and an explicit photon/energy contract for
+  inelastic processes.
+- References and tests: Siewert (2000) scattering matrix reconstructed by
+  vSmartMOM (`test/data/`), Chowdhary et al. (2020) Table 2, and the
+  Loisel et al. (2023) HydroLight input IOPs
+  (`data/reference/loisel2023_hydrolight_iops.csv`, CC0), with a docs page
+  comparing them.
+- Interactive Chart.js documentation figures with data tables
+  (`docs/DocCharts.jl`, `docs/src/assets/oo_charts.js`); Plots.jl is no
+  longer a docs dependency. Consumer API and vSmartMOM integration pages
+  rewritten (with a tested adapter sketch).
 
 ### Added — Phase 4 (in progress)
 

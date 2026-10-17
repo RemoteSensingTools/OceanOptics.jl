@@ -30,7 +30,7 @@ struct SpectralTable{T<:AbstractFloat, I}
     λ::Vector{T}
     "Tabulated value at each λ (units fixed by consumer)."
     y::Vector{T}
-    "Cached `Interpolations.jl` linear interpolant with flat extrapolation."
+    "Cached `Interpolations.jl` linear interpolant (queries are range-checked by `linterp`)."
     itp::I
 end
 
@@ -56,14 +56,15 @@ end
     linterp(tbl::SpectralTable, x) -> value
 
 Piecewise-linear interpolation of `tbl.y` at wavelength `x`, delegating
-to `Interpolations.jl`. Outside `[tbl.λ[1], tbl.λ[end]]` the boundary
-value is returned (via `Flat()` extrapolation), and ForwardDiff `Dual`
-inputs remain `Dual` throughout — the interior interpolation is a linear
-combination of the tabulated endpoints, and `Flat()` clamps `x` to the
-grid before evaluation so a `Dual` above-range collapses its partial to
-zero automatically, matching the derivative of a constant extrapolation.
+to `Interpolations.jl`. Throws a `DomainError` outside
+`[tbl.λ[1], tbl.λ[end]]`: a table never supplies values beyond its data.
+ForwardDiff `Dual` inputs propagate through the interpolation.
 """
-linterp(tbl::SpectralTable, x) = tbl.itp(x)
+function linterp(tbl::SpectralTable, x)
+    first(tbl.λ) ≤ x ≤ last(tbl.λ) ||
+        throw(DomainError(x, "outside the tabulated range $(first(tbl.λ))–$(last(tbl.λ)) nm"))
+    return tbl.itp(x)
+end
 
 # =============================================================================
 # Data directory and provenance-CSV loader

@@ -158,7 +158,9 @@ backscattering(c::TabulatedScatterer, λ::Real) =
 backscattering(c::TabulatedScatterer, λ::AbstractVector) =
     [backscattering(c, λi) for λi in λ]
 
-phase_function(c::TabulatedScatterer) = c.phase
+scattering_phase(c::TabulatedScatterer) = c.phase
+
+_component_label(c::TabulatedScatterer) = isempty(c.source) ? "TabulatedScatterer" : c.source
 
 """
     is_total_absorption(c::AbstractOceanConstituent) -> Bool

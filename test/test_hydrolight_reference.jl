@@ -30,13 +30,21 @@
         @test maximum(abs, scattering(water, λ) ./ ref["bw"] .- 1) < 1e-4
     end
 
-    @testset "Pure-water absorption: Pope & Fry (1997), 420–725 nm" begin
-        # HydroLight uses the IOCCG (2018) composite, which is Pope & Fry
-        # over 420–725 nm and different tables outside (see the docs page).
-        # T = 20 °C: no Pegau temperature correction is applied.
-        pf  = PureWater{Float64}(absorption_model = PopeFry1997(), temperature = 20.0)
+    @testset "Pure-water absorption" begin
+        # HydroLight's tables carry no temperature correction; at the tables'
+        # 22 °C reference OceanOptics applies none either.
+        # Pope & Fry (1997) is the IOCCG composite over 420–725 nm.
+        pf  = PureWater{Float64}(absorption_model = PopeFry1997(), temperature = 22.0)
         sel = 420.0 .≤ λ .≤ 725.0
         @test absorption(pf, λ[sel]) ≈ ref["aw"][sel] rtol = 1e-6
+        # The IOCCG2018 model is this composite (bundled from the same database;
+        # an identity check of the model's table switch, not an independent test).
+        io = PureWater{Float64}(absorption_model = IOCCG2018(), temperature = 22.0)
+        @test absorption(io, λ) ≈ ref["aw"] rtol = 1e-5
+        # Kou et al. (1993), the composite's source above 730 nm, matches it at
+        # 730, 740 and 750 nm within 0.5 % (within 1 % over 730–750 nm).
+        kou = PureWater{Float64}(absorption_model = Kou1993(), temperature = 22.0)
+        @test absorption(kou, [730.0, 740.0, 750.0]) ≈ ref["aw"][end-4:2:end] rtol = 5e-3
     end
 
     @testset "Tabulated route reproduces the HydroLight bulk IOPs" begin
@@ -52,9 +60,9 @@
                 TabulatedScatterer(λ, c("bd"),
                                    FournierForandPhase{Float64}(backscatter_fraction = 0.018))])
             opt = layer_optics(layer, λ; ℓ_max = 16)
-            @test opt.ϖ ≈ c("b") ./ (c("a") .+ c("b")) rtol = 1e-4
-            @test opt.B ≈ c("bb") ./ c("b") rtol = 2e-4
-            @test opt.τ ≈ c("a") .+ c("b") rtol = 1e-4
+            @test single_scattering_albedo(opt) ≈ c("b") ./ (c("a") .+ c("b")) rtol = 1e-4
+            @test backscatter_fraction(opt) ≈ c("bb") ./ c("b") rtol = 2e-4
+            @test optical_depth(opt) ≈ c("a") .+ c("b") rtol = 1e-4
         end
     end
 end

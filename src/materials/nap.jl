@@ -130,7 +130,7 @@ NonAlgalParticles{FT}(; kwargs...) where {FT<:AbstractFloat} =
     NonAlgalParticles{FT, BabinBricaud2003}(; kwargs...)
 NonAlgalParticles(; kwargs...) = NonAlgalParticles{Float64}(; kwargs...)
 
-phase_function(nap::NonAlgalParticles) = nap.phase
+scattering_phase(nap::NonAlgalParticles) = nap.phase
 
 # -----------------------------------------------------------------------------
 # BabinBricaud2003 dispatch: exponential a, (440/λ) b

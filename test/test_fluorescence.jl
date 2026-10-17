@@ -88,4 +88,21 @@
         @test_throws ArgumentError CDOMFluorescence{Float64}(cdom;
             emission = em, quantum_yield = -0.01)
     end
+
+    @testset "Photon and energy kernels" begin
+        phyto = Phytoplankton{Float64, Bricaud1998}(Chl = 1.0)
+        sif   = chlorophyll_fluorescence(phyto)
+        λ′, λ = 440.0, 685.0
+        # Quantum yield is part of the excitation coefficient, applied once.
+        @test excitation_absorption(sif, λ′) ≈ quantum_yield(sif) * absorption(phyto, λ′)
+        # Energy kernel = photon kernel × λ'/λ (ratio of photon energies).
+        @test radiance_source_kernel(sif, λ′, λ) ≈ inelastic_coefficient(sif, λ′, λ) * λ′ / λ
+        # Photon budget: emission integrates to the excitation coefficient.
+        em = 600.0:0.25:800.0
+        @test sum(inelastic_coefficient(sif, λ′, x) for x in em) * step(em) ≈
+              excitation_absorption(sif, λ′) rtol = 1e-6
+        # Zero yield, zero source.
+        dark = IsotropicFluorescence{Float64}(phyto; emission = sif.emission, quantum_yield = 0.0)
+        @test radiance_source_kernel(dark, λ′, λ) == 0
+    end
 end

@@ -19,9 +19,17 @@
 #   p^I(θ)    — angular redistribution (isotropic ⇒ Fourier mode m=0 only)
 #
 # Concrete process types implement the three trait functions exported here.
-# Package-downstream code (vSmartMOM's `AbstractRamanType` adapter, users'
-# own solvers) consumes those kernels against an excitation-field
-# `E°(τ, λ')` produced by a first-pass elastic solve.
+#
+# Photon conventions (the contract a solver relies on):
+#   * a^I(λ') is a *photon* conversion rate: for fluorescence it already
+#     includes the quantum yield, a^I = φ·a_absorber; for Raman it is the
+#     Raman scattering coefficient b_R(λ'). Do not apply φ again.
+#   * f^I(λ', λ) redistributes photons, per nm of emission wavelength.
+#   * An energy (radiance) source therefore needs the photon-energy ratio
+#     λ'/λ: `radiance_source_kernel(p, λ', λ) = a^I f^I λ'/λ`.
+#   * The bundled water absorption models do not add a separate Raman loss;
+#     whether b_R(λ') is added to the attenuation at λ' is the solver's
+#     convention and must match the reference it is compared with.
 #
 # Note the scope: this file is *data and kernels only*. The two-pass
 # elastic→inelastic solve itself lives in the radiative-transfer
@@ -49,8 +57,11 @@ function excitation_absorption end
 """
     emission(p::AbstractOceanInelasticProcess, λ_prime, λ) -> FT
 
-Spectral redistribution density `f^I(λ', λ)` `[1/nm]`, normalized so
-`∫ f(λ', λ) dλ = 1` for every `λ'`.
+Spectral redistribution density of emitted *photons* `f^I(λ', λ)`
+`[1/nm]` (per nm of emission wavelength), normalized so that
+`∫ f(λ', λ) dλ = 1` over all emission wavelengths for every `λ'`. A finite
+emission grid captures only part of this integral; the solver accounts for
+the remainder.
 """
 function emission end
 
@@ -85,3 +96,23 @@ if a process supplies a joint closed form cheaper than the product.
 """
 inelastic_coefficient(p::AbstractOceanInelasticProcess, λ_prime, λ) =
     excitation_absorption(p, λ_prime) * emission(p, λ_prime, λ)
+
+"""
+    radiance_source_kernel(p, λ_prime, λ) -> FT
+
+Kernel `b^I(λ', λ) · λ'/λ` `[1/m/nm]` that converts excitation spectral
+irradiance into emitted *energy*: for an isotropic process the volume
+source of spectral radiance is
+
+```math
+J(\\lambda) = \\frac{1}{4\\pi} \\int b^I(\\lambda', \\lambda) \\frac{\\lambda'}{\\lambda} E_0(\\lambda')\\, d\\lambda'
+```
+
+with `E₀` the spectral scalar irradiance `[W m⁻² nm⁻¹]` (total intensity
+integrated over solid angle, direct and diffuse). [`inelastic_coefficient`](@ref)
+is the photon kernel; the factor `λ'/λ` is the ratio of photon energies.
+On a discrete grid the solver integrates with its own bin weights and,
+in wavenumber, the Jacobian `|dλ/dν| = 10⁷/ν²`.
+"""
+radiance_source_kernel(p::AbstractOceanInelasticProcess, λ_prime, λ) =
+    inelastic_coefficient(p, λ_prime, λ) * λ_prime / λ

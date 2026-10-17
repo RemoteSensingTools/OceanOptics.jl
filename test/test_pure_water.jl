@@ -1,38 +1,44 @@
 @testset "PureWater" begin
 
     @testset "Pope-Fry (1997) absorption" begin
-        # Reference: Pope-Fry 1997 table values (bundled from omlc.org).
-        # DESIGN §11 quotes a_w(440 nm) ≈ 0.00635 m⁻¹.
-        w = PureWater{Float64}(absorption_model = PopeFry1997())
+        # Reference: Pope-Fry 1997 table values (bundled from omlc.org), at the
+        # table's 22 °C reference temperature (no Pegau correction).
+        w = PureWater{Float64}(absorption_model = PopeFry1997(), temperature = 22.0)
         @test absorption(w, 440.0) ≈ 0.00635 rtol=1e-3
-        # Sanity: absorption is monotone in the mid-visible window
         @test absorption(w, 450.0) > absorption(w, 440.0)
-        # Endpoints (Flat() extrapolation): Pope-Fry spans 380–727.5 nm.
         @test absorption(w, 380.0) ≈ 0.01137 rtol=1e-3
+        # Outside 380–727.5 nm the table has no data: an error, not a clamp.
+        @test_throws DomainError absorption(w, 375.0)
+        @test_throws DomainError absorption(w, 750.0)
     end
 
     @testset "Smith-Baker (1981) absorption" begin
         w = PureWater{Float64}(absorption_model = SmithBaker1981())
-        # Source value at 500 nm is 0.0204 1/cm * 100 = not in the SB81 table;
-        # SB81 is 10 nm grid. At 500 nm exactly: 0.00257 1/m. Check a table pt.
         @test absorption(w, 500.0) > 0.0
         @test absorption(w, 500.0) < absorption(w, 200.0)   # UV is very absorbing
+        # No temperature correction: Smith & Baker give no reference temperature.
+        @test absorption(w, 700.0) == absorption(PureWater{Float64}(absorption_model = SmithBaker1981(),
+                                                                     temperature = 5.0), 700.0)
+        @test_throws DomainError absorption(w, 850.0)
     end
 
-    @testset "Combined piecewise (fallback to Smith-Baker <380 nm)" begin
-        w = PureWater{Float64}(absorption_model = CombinedPopeFryMason())
-        # 440 nm is in the Pope-Fry segment
-        @test absorption(w, 440.0) ≈ 0.00635 rtol=1e-3
-        # 350 nm falls back to Smith-Baker (since Mason not bundled)
-        @test absorption(w, 350.0) > 0.0
-        # 760 nm is in the Smith-Baker segment
-        @test absorption(w, 760.0) > 0.5
+    @testset "IOCCG (2018) composite, the default" begin
+        w = PureWater{Float64}(temperature = 22.0)
+        @test w.absorption_model isa IOCCG2018
+        @test absorption(w, 350.0) ≈ 0.0071 rtol=1e-4            # Morel et al. (2007) segment
+        @test absorption(w, 440.0) ≈ 0.00635 rtol=1e-3           # Pope & Fry segment
+        # Continued with Kou et al. (1993) above 750 nm (OCO/SIF wavelengths).
+        kou = PureWater{Float64}(absorption_model = Kou1993(), temperature = 22.0)
+        @test absorption(w, 760.0) == absorption(kou, 760.0)
+        @test 2.0 < absorption(w, 760.0) < 3.5
+        @test_throws DomainError absorption(w, 340.0)
     end
 
-    @testset "MasonConeFry2016 errors helpfully without data" begin
-        # The Mason-Cone-Fry CSV is not bundled (DESIGN §8.1).
-        w = PureWater{Float64}(absorption_model = MasonConeFry2016())
-        @test_throws ErrorException absorption(w, 300.0)
+    @testset "Temperature correction relative to the table temperature" begin
+        cold = PureWater{Float64}(absorption_model = PopeFry1997(), temperature = 12.0)
+        ref  = PureWater{Float64}(absorption_model = PopeFry1997(), temperature = 22.0)
+        @test absorption(cold, 500.0) == absorption(ref, 500.0)   # outside 600–800 nm
+        @test absorption(cold, 720.0) < absorption(ref, 720.0)    # water absorbs more when warm
     end
 
     @testset "Morel (1974) scattering" begin
@@ -79,13 +85,18 @@
         end
     end
 
-    @testset "Pegau temperature correction is zero outside 600–800 nm" begin
-        w₂₀ = PureWater{Float64}(temperature = 20.0, absorption_model = PopeFry1997())
-        w₃₀ = PureWater{Float64}(temperature = 30.0, absorption_model = PopeFry1997())
-        # Outside calibrated window — temperature has no effect
-        @test absorption(w₂₀, 450.0) == absorption(w₃₀, 450.0)
-        # Inside calibrated window — 10 K gap ⇒ measurable shift
-        @test absorption(w₃₀, 700.0) > absorption(w₂₀, 700.0)
+    @testset "Röttgers et al. (2014) temperature correction" begin
+        w₂₂ = PureWater{Float64}(temperature = 22.0, absorption_model = PopeFry1997())
+        w₃₂ = PureWater{Float64}(temperature = 32.0, absorption_model = PopeFry1997())
+        # Below 550 nm the coefficient is below its uncertainty: no correction.
+        @test absorption(w₂₂, 450.0) == absorption(w₃₂, 450.0)
+        # The O–H overtone near 740 nm: Ψ_T ≈ 0.016 1/(m K) (Röttgers Fig. 5),
+        # far above the old five-point table's 0.0013.
+        k = PureWater{Float64}(temperature = 32.0, absorption_model = Kou1993())
+        k₀ = PureWater{Float64}(temperature = 22.0, absorption_model = Kou1993())
+        @test 0.012 < (absorption(k, 740.0) - absorption(k₀, 740.0)) / 10 < 0.02
+        # Ψ_T changes sign: slightly negative at 700 nm.
+        @test absorption(w₃₂, 700.0) < absorption(w₂₂, 700.0)
     end
 
     @testset "Float32 parametric support" begin

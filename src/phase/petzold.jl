@@ -1,132 +1,72 @@
 # =============================================================================
-# Petzold "San Diego Harbor" tabulated phase function
+# Petzold (1972) San Diego Harbor phase function
 # =============================================================================
 #
-# Petzold (1972) "Volume scattering functions for selected ocean waters",
-# SIO Ref. 72-78, reports a measured volume-scattering function (VSF) for
-# ocean particulate scattering in San Diego Harbor. The table is
-# reproduced in Mobley (1994) "Light and Water", Academic Press,
-# Appendix A.4. It was the community-standard phase function until the
-# Fournier–Forand analytic form (Mobley, Sundman & Boss 2002, Appl. Opt.
-# 41, 1035) displaced it for most applications; we ship it for
-# reproducibility of legacy results.
-#
-# Data provenance
-# ---------------
-# The VSF is tabulated as β(θ) `[1/m/sr]` on a coarse θ grid. The shipped
-# CSV (`data/petzold_sdh.csv`) must contain (θ_deg, β) pairs; we normalize
-# to the OceanOptics.jl phase-function convention `(1/2) ∫₋₁¹ p(μ) dμ = 1`
-# at load time. Values below the minimum tabulated angle are extrapolated
-# log-linearly toward the forward peak; values above the maximum angle
-# are held flat at the final measurement.
-#
-# The Petzold table is NOT shipped by default in this OceanOptics.jl
-# release — it needs transcription from Mobley (1994) Appendix A.4 (see
-# DESIGN §8.7). Selecting `PetzoldPhase()` before dropping the CSV in
-# raises an informative error.
+# Tabulated volume scattering function at 55 angles, 0.1°–180°. Between
+# nodes it is interpolated as a power law (linear in log p vs log θ), and
+# below 0.1° the first segment's power law is continued into the forward
+# peak (p ∝ θ^a with a ≈ −1.3, integrable). The table is normalized with
+# the same converged angular quadrature used for its moments, so
+# (1/2)∫p dμ = 1 holds for the interpolant as implemented; the forward
+# extrapolation is a modelling choice that affects that normalization.
 # =============================================================================
 
 """
 $(TYPEDEF)
 
-Tabulated Petzold (1972) "San Diego Harbor" particulate phase function.
-
-The underlying spectral/angular table is loaded lazily from
-`data/petzold_sdh.csv`; the file has to be transcribed from Mobley (1994)
-*Light and Water*, Appendix A.4. See DESIGN §8.7 for the column
-convention the loader expects.
+Petzold (1972) "San Diego Harbor" particulate phase function (Mobley 1994,
+Table 3.10), a scalar phase function.
 
 # Fields
 $(TYPEDFIELDS)
+
+Power-law interpolation between the 55 tabulated angles; power-law
+extrapolation below 0.1° using the first two nodes; normalized as
+`(1/2)∫p dμ = 1` for this interpolant.
 """
 struct PetzoldPhase{FT} <: AbstractOceanPhaseFunction{FT}
-    "Cosines of the tabulated scattering angles, sorted ascending."
-    cosθ::Vector{FT}
-    "Normalized phase-function values `p(μ)` at those cosines."
+    "Tabulated scattering angles [rad], ascending, from 0.1° to 180°"
+    θ::Vector{FT}
+    "Normalized phase function at those angles"
     p::Vector{FT}
+    "Scattering coefficient implied by the tabulated VSF and its extrapolation, `4π·(1/2)∫β dμ` `[1/m]`"
+    b::FT
 end
 
-const _PETZOLD_SDH_PATH          = data_path("petzold_sdh.csv")
-const _PETZOLD_SDH_AVAILABLE     = isfile(_PETZOLD_SDH_PATH)
-const _PETZOLD_SDH_CACHE         = Ref{Union{Nothing, PetzoldPhase{Float64}}}(nothing)
+const _PETZOLD_SDH_TABLE = load_spectral_csv(data_path("petzold_sdh.csv"))   # θ_deg, β
 
-"Return the cached Petzold phase function, loading it on first call."
-function _petzold_sdh()
-    pz = _PETZOLD_SDH_CACHE[]
-    pz === nothing || return pz
-    isfile(_PETZOLD_SDH_PATH) || error(
-        "PetzoldPhase requires `data/petzold_sdh.csv`, which is not bundled ",
-        "with this OceanOptics.jl release. Transcribe Petzold (1972) SIO ",
-        "Ref. 72-78 / Mobley (1994) Appendix A.4 (see DESIGN §8.7). Until ",
-        "then, use FournierForandPhase — Mobley et al. (2002) showed it ",
-        "matches measurements across three decades of forward-scattered ",
-        "intensity better than the tabulated Petzold.")
-    pz = _load_petzold_csv(_PETZOLD_SDH_PATH)
-    _PETZOLD_SDH_CACHE[] = pz
-    return pz
-end
-
-"""
-    PetzoldPhase{FT}()
-
-Construct a `PetzoldPhase` from the bundled CSV. Lazy: the file is
-parsed on first call and cached module-wide. Promotes the `Float64`
-canonical representation to `FT`.
-"""
 function PetzoldPhase{FT}() where {FT<:AbstractFloat}
-    raw = _petzold_sdh()
-    return PetzoldPhase{FT}(convert(Vector{FT}, raw.cosθ), convert(Vector{FT}, raw.p))
+    θ  = deg2rad.(_PETZOLD_SDH_TABLE.λ)
+    β  = _PETZOLD_SDH_TABLE.y
+    raw = PetzoldPhase{Float64}(θ, β, NaN)
+    a  = _petzold_forward_exponent(raw)
+    a > -2 || throw(ErrorException("Petzold forward extrapolation is not integrable (a = $a)"))
+    I = only(_converged(16; what = "Petzold normalization") do level
+        t, w, θ_lo = _angular_rule(16, level; breaks = θ)
+        [sum(w[i] * _phase_at_angle(raw, t[i]) for i in eachindex(t)) / 2 +
+         _forward_tail(raw, θ_lo, 0)[1]]
+    end)
+    return PetzoldPhase{FT}(FT.(θ), FT.(β ./ I), FT(4π * I))
 end
 
 PetzoldPhase() = PetzoldPhase{Float64}()
 
-"""
-Internal loader. CSV must provide columns `theta_deg, beta_inv_m_sr` (or
-equivalent first/second columns). The loader converts angles to μ =
-cos θ and normalizes so `(1/2) ∫₋₁¹ p(μ) dμ = 1`.
-"""
-function _load_petzold_csv(path::AbstractString)
-    table = load_spectral_csv(path)   # columns: θ_deg, β
-    θ_deg = table.λ
-    β     = table.y
+_petzold_forward_exponent(pf::PetzoldPhase) =
+    log(pf.p[2] / pf.p[1]) / log(pf.θ[2] / pf.θ[1])
 
-    # Convert θ [deg] → μ = cos θ, ascending in μ (descending in θ)
-    μ = cos.(deg2rad.(θ_deg))
-    perm = sortperm(μ)
-    μ  = μ[perm]
-    β  = β[perm]
-
-    # Normalize: the target is (1/2) ∫₋₁¹ p(μ) dμ = 1. We trapezoid-integrate
-    # the tabulated β, then divide out so p = β / ( (1/2)∫β dμ ).
-    ∫β = 0.0
-    @inbounds for i in 1:length(μ)-1
-        ∫β += 0.5 * (β[i] + β[i+1]) * (μ[i+1] - μ[i])
+function _phase_at_angle(pf::PetzoldPhase, θ::Real)
+    θs, ps = pf.θ, pf.p
+    if θ ≤ first(θs)        # power-law forward peak; finite at θ = 0
+        return first(ps) * (max(θ, 1e-300) / first(θs))^_petzold_forward_exponent(pf)
     end
-    norm_factor = 2 / ∫β
-    p = β .* norm_factor
-
-    return PetzoldPhase{Float64}(μ, p)
+    θ ≥ last(θs) && return last(ps)
+    i = searchsortedlast(θs, θ)
+    t = log(θ / θs[i]) / log(θs[i+1] / θs[i])
+    return ps[i] * (ps[i+1] / ps[i])^t
 end
 
-# -----------------------------------------------------------------------------
-# Phase function value — linear interpolation in μ
-# -----------------------------------------------------------------------------
+phase_function_value(pf::PetzoldPhase{FT}, μ::Real) where {FT} =
+    FT(_phase_at_angle(pf, acos(clamp(μ, -1, 1))))
 
-function phase_function_value(pf::PetzoldPhase{FT}, cosθ::Real) where {FT}
-    μ_grid = pf.cosθ
-    p_grid = pf.p
-    # Clamp to tabulated range; boundary-flat extrapolation, AD-safe via
-    # `min`/`max` on the input type.
-    if cosθ ≤ first(μ_grid)
-        return first(p_grid) + zero(cosθ)
-    elseif cosθ ≥ last(μ_grid)
-        return last(p_grid) + zero(cosθ)
-    end
-    i  = searchsortedlast(μ_grid, cosθ)
-    μ₁, μ₂ = μ_grid[i], μ_grid[i+1]
-    p₁, p₂ = p_grid[i], p_grid[i+1]
-    t  = (cosθ - μ₁) / (μ₂ - μ₁)
-    return p₁ + t * (p₂ - p₁)
-end
-
-is_polarizable(::PetzoldPhase) = false
+_angular_breaks(pf::PetzoldPhase) = pf.θ
+_forward_exponent(pf::PetzoldPhase) = _petzold_forward_exponent(pf)

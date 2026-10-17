@@ -32,4 +32,5 @@ emission
 excitation_range
 is_isotropic
 inelastic_coefficient
+radiance_source_kernel
 ```

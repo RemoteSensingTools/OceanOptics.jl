@@ -30,7 +30,7 @@ using Main.DocCharts
 ref = OceanOptics._read_csv_columns(
     OceanOptics.data_path("reference/loisel2023_hydrolight_iops.csv"))
 λ   = ref["lambda_nm"]
-water(; a = CombinedPopeFryMason(), b = ZhangHu2009(), T = 18.0, S = 35.0) =
+water(; a = IOCCG2018(), b = ZhangHu2009(), T = 18.0, S = 35.0) =
     PureWater{Float64}(absorption_model = a, scattering_model = b,
                        temperature = T, salinity = S)
 ```
@@ -55,61 +55,59 @@ linechart([Series("Zhang-Hu 2009, 18 °C, S = 35", λ, zhh),
 
 ## Pure-water absorption
 
-Between 420 and 725 nm the HydroLight values are the Pope & Fry (1997)
-table, which OceanOptics reproduces exactly. Outside that range the two
-use different sources: the default `CombinedPopeFryMason` model falls back
-to Smith & Baker (1981) below 380 nm and above 700 nm, because the
-Mason, Cone & Fry (2016) UV table is not bundled yet. Smith & Baker's UV
-values are several times higher than those of Morel et al. (2007).
-`PopeFry1997` alone is defined for 380–727.5 nm and is shown only there:
-outside its table it would return the end values.
+The default absorption model, [`IOCCG2018`](@ref), is the composite
+HydroLight used here — its 350–750 nm table is taken from this database
+— continued above 750 nm with Kou et al. (1993), the composite's own
+source at 730–750 nm. The individual primary tables bundled with
+OceanOptics compare as follows (each drawn over its own range; at 22 °C,
+where no temperature correction applies):
 
 ```@example hl
 in_range(lo, hi) = lo .≤ λ .≤ hi
-λpf  = λ[in_range(380, 727.5)]
-a_hl = ref["aw"]
-a_co = absorption(water(T = 20.0), λ)                       # default model, no T correction
-a_pf = absorption(water(a = PopeFry1997(), T = 20.0), λpf)
-a_sb = absorption(water(a = SmithBaker1981(), T = 20.0), λ)
-linechart([Series("HydroLight (IOCCG 2018)", λ, a_hl; points = true, reference = true),
-           Series("CombinedPopeFryMason (default)", λ, a_co),
-           Series("PopeFry1997", λpf, a_pf; dash = true),
-           Series("SmithBaker1981", λ, a_sb; dot = true)];
-          xlabel = "wavelength λ [nm]", ylabel = "a_w(λ) [m⁻¹]", xname = "λ [nm]",
-          ylog = true)
+a_hl  = ref["aw"]
+models = [("PopeFry1997", PopeFry1997(), in_range(380, 727.5)),
+          ("SmithBaker1981", SmithBaker1981(), in_range(350, 750)),
+          ("Kou1993", Kou1993(), in_range(667, 750))]
+a(m, sel) = absorption(water(a = m, T = 22.0), λ[sel])
+linechart([Series("HydroLight (IOCCG 2018)", λ, a_hl; points = true, reference = true);
+           [Series(name, λ[sel], a(m, sel); dash = name == "SmithBaker1981",
+                   dot = name == "Kou1993") for (name, m, sel) in models]];
+          xlabel = "wavelength λ [nm]", ylabel = "a_w(λ) [m⁻¹]", xname = "λ [nm]", ylog = true)
 ```
 
-The ratio makes the differences explicit:
-
 ```@example hl
-linechart([Series("CombinedPopeFryMason (default)", λ, a_co ./ a_hl),
-           Series("PopeFry1997", λpf, a_pf ./ a_hl[in_range(380, 727.5)]; dash = true),
-           Series("SmithBaker1981", λ, a_sb ./ a_hl; dot = true),
+linechart([[Series(name, λ[sel], a(m, sel) ./ a_hl[sel]; dash = name == "SmithBaker1981",
+                   dot = name == "Kou1993") for (name, m, sel) in models];
            Series("HydroLight", λ, ones(length(λ)); reference = true, dot = true)];
-          xlabel = "wavelength λ [nm]", ylabel = "a_w(OceanOptics) / a_w(HydroLight)",
+          xlabel = "wavelength λ [nm]", ylabel = "a_w(model) / a_w(HydroLight)",
           xname = "λ [nm]", ylog = true)
 ```
 
 ```@example hl
-ranges = [(350, 375, "Morel et al. 2007", "Smith & Baker 1981"),
-          (380, 415, "Morel et al. 2007", "Pope & Fry 1997"),
-          (420, 700, "Pope & Fry 1997",   "Pope & Fry 1997"),
-          (705, 725, "Pope & Fry 1997",   "Smith & Baker 1981"),
-          (730, 750, "Kou et al. 1993",   "Smith & Baker 1981")]
-@printf("%-9s  %-18s  %-20s  %s\n", "λ [nm]", "HydroLight", "OceanOptics default", "ratio")
-for (lo, hi, hl, oo) in ranges
-    r = (a_co ./ a_hl)[in_range(lo, hi)]
-    @printf("%3d–%3d    %-18s  %-20s  %.3f – %.3f\n", lo, hi, hl, oo, extrema(r)...)
+for (name, m, sel) in models
+    for (lo, hi) in ((350, 415), (420, 725), (730, 750))
+        s = sel .& in_range(lo, hi)
+        any(s) || continue
+        r = a(m, s) ./ a_hl[s]
+        @printf("%-15s %3d–%3d nm: ratio %.3f – %.3f\n", name, max(lo, Int(minimum(λ[s]))),
+                hi, extrema(r)...)
+    end
 end
 ```
 
-OceanOptics also applies the Pegau et al. (1997) temperature correction
-between 600 and 800 nm, referenced to 20 °C; HydroLight's tabulated values
-carry no temperature correction. At 18 °C the correction lowers
-`a_w` by up to about 1 %:
+Pope & Fry is the composite between 420 and 725 nm; Smith & Baker's
+"clearest natural water" values are several times higher in the UV,
+which is why they are no longer used in the default (the previous
+default fell back to them below 380 nm); Kou et al. (1993) supplies
+the composite's 730–750 nm values to within 1 %.
+
+OceanOptics applies the Röttgers et al. (2014) temperature correction
+from 550 nm upward, relative to the tables' 22 °C reference; HydroLight's
+tabulated values carry no correction. At the database's 18 °C the
+correction changes `a_w` by up to a few percent near the 740 nm O–H band:
 
 ```@example hl
-δ = absorption(water(), λ) ./ absorption(water(T = 20.0), λ) .- 1
+δ = absorption(water(), λ) ./ absorption(water(T = 22.0), λ) .- 1
 @printf("largest change at 18 °C: %.2f %% at %.0f nm\n", 100minimum(δ), λ[argmin(δ)])
 ```
 
@@ -134,9 +132,10 @@ for (k, case) in enumerate(cases)
         TabulatedScatterer(λ, c("bd"), FournierForandPhase{Float64}(backscatter_fraction = 0.018))])
     opt  = layer_optics(layer, λ; ℓ_max = 16)
     ϖ_hl = c("b") ./ (c("a") .+ c("b"))
+    ϖ, B = single_scattering_albedo(opt), backscatter_fraction(opt)
     @printf("%-7s max |Δϖ| = %.1e   max |ΔB/B| = %.1e\n", case,
-            maximum(abs, opt.ϖ .- ϖ_hl), maximum(abs, opt.B ./ (c("bb") ./ c("b")) .- 1))
-    push!(series, Series("$case: OceanOptics", λ, opt.ϖ; slot = k - 1))
+            maximum(abs, ϖ .- ϖ_hl), maximum(abs, B ./ (c("bb") ./ c("b")) .- 1))
+    push!(series, Series("$case: OceanOptics", λ, ϖ; slot = k - 1))
     push!(series, Series("$case: HydroLight", λ, ϖ_hl; points = true, slot = k - 1))
 end
 linechart(series; xlabel = "wavelength λ [nm]", ylabel = "single-scattering albedo ϖ",
@@ -148,13 +147,11 @@ linechart(series; xlabel = "wavelength λ [nm]", ylabel = "single-scattering alb
 * The `ZhangHu2009` seawater-scattering port agrees with HydroLight's
   input at 18 °C and salinity 35 within the data's precision
   (`test/test_hydrolight_reference.jl` checks 1 × 10⁻⁴).
-* The bundled Pope & Fry table matches over 420–725 nm.
-* The default pure-water absorption differs strongly below 420 nm and
-  moderately above 700 nm. Choosing and bundling primary UV and near-IR
-  tables (Mason, Cone & Fry 2016 or Morel et al. 2007; Kou et al. 1993),
-  and reconciling the temperature-correction reference, are open work.
-  Until then, pass HydroLight-matched water absorption as a
-  `TabulatedAbsorber` when comparing with these simulations.
-* Particle backscattering follows directly from the Fournier-Forand
-  backscatter fractions; the phase-function shapes themselves are not part
-  of the database and are not compared here.
+* The bundled Pope & Fry table matches over 420–725 nm, and Kou et al.
+  (1993) over 730–750 nm within 1 %; the default `IOCCG2018` model is
+  the HydroLight composite by construction.
+* Bulk single-scattering albedo and backscatter fraction are reproduced
+  through the tabulated route, with Fournier-Forand particles on the
+  Mobley et al. (2002) family that HydroLight uses.
+* Particle phase-function shapes are not part of the database and are not
+  compared here.

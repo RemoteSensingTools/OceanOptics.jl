@@ -1,0 +1,92 @@
+# Dataset:      Pure-water absorption recommended by the IOCCG Protocol Series (2018), 350-750 nm
+# Composition:  Morel et al. (2007) 340-415 nm, Pope & Fry (1997) 420-725 nm, Kou et al. (1993)
+#               730-750 nm (IOCCG Ocean Optics & Biogeochemistry Protocols for Satellite Ocean Colour
+#               Sensor Validation, Vol. 1, 2018), as stated by Loisel et al. (2023), ESSD 15, 3711, Sect. 2.
+# Retrieved:    As used for the HydroLight input database of Loisel et al. (2023), Dryad
+#               doi:10.6076/D1630T (CC0), version 2024-06-24: derived as a - anw; see
+#               data/reference/loisel2023_hydrolight_iops.csv for the extraction record.
+# Range:        350 to 750 nm, 5 nm resolution
+# Precision:    single-precision values rounded to 6 significant digits
+# Columns:      lambda_nm, absorption_m_inv
+lambda_nm,absorption_m_inv
+350,0.0071
+355,0.0068
+360,0.0066
+365,0.0063
+370,0.006
+375,0.0056
+380,0.0052
+385,0.005
+390,0.0048
+395,0.0047
+400,0.0046
+405,0.0046
+410,0.0046
+415,0.0046
+420,0.00454
+425,0.00478
+430,0.00495
+435,0.0053
+440,0.00635
+445,0.00751
+450,0.00922
+455,0.00962
+460,0.00979
+465,0.01011
+470,0.0106
+475,0.0114
+480,0.0127
+485,0.0136
+490,0.015
+495,0.0173
+500,0.0204
+505,0.0256
+510,0.0325
+515,0.0396
+520,0.0409
+525,0.0417
+530,0.0434
+535,0.0452
+540,0.0474
+545,0.0511
+550,0.0565
+555,0.0596
+560,0.0619
+565,0.0642
+570,0.0695
+575,0.0772
+580,0.0896
+585,0.11
+590,0.1351
+595,0.1672
+600,0.2224
+605,0.2577
+610,0.2644
+615,0.2678
+620,0.2755
+625,0.2834
+630,0.2916
+635,0.3012
+640,0.3108
+645,0.325
+650,0.34
+655,0.371
+660,0.41
+665,0.429
+670,0.439
+675,0.448
+680,0.465
+685,0.486
+690,0.516
+695,0.559
+700,0.624
+705,0.704
+710,0.827
+715,1.007
+720,1.231
+725,1.489
+730,1.97
+735,2.51
+740,2.78
+745,2.83
+750,2.85

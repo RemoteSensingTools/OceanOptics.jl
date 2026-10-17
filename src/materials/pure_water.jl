@@ -9,29 +9,27 @@
 #   PureWater{FT, A <: AbstractPureWaterAbsorptionModel,
 #                 S <: AbstractPureWaterScatteringModel}
 #
-# This lets you, for example, mix Pope & Fry (1997) visible-light absorption
-# with Zhang, Hu & He (2009) salinity-aware scattering — which is exactly
-# the combination that HydroLight 5 uses by default. Or swap either
-# independently as the literature advances.
+# Either can be swapped independently.
 #
-# Temperature/salinity corrections are carried as optional fields on the
-# absorption-model tag type. For the scattering model, salinity is a
-# *required* input (Zhang et al. 2009 cannot produce a pure-water result
-# without knowing S).
+# Absorption (each table throws outside its own range):
+#   IOCCG2018       — 350–2500 nm, default: the IOCCG (2018) recommended
+#                     composite (Morel et al. 2007, Pope & Fry 1997, Kou
+#                     et al. 1993) as used for HydroLight by Loisel et al.
+#                     (2023) over 350–750 nm, continued with Kou et al. 1993
+#   PopeFry1997     — 380–727.5 nm
+#   Kou1993         — 667–2500 nm
+#   SmithBaker1981  — 200–800 nm, "clearest natural waters"; several times
+#                     higher than modern pure-water values below ~420 nm
 #
-# Shipped model tags
-# ------------------
-#
-# Absorption:
-#   SmithBaker1981        — 200–800 nm, low-precision, good NIR
-#   PopeFry1997           — 380–700 nm, visible gold standard
-#   MasonConeFry2016      — 250–550 nm, modern UV measurements
-#   CombinedPopeFryMason  — piecewise: Mason 250–380, PopeFry 380–700, SmithBaker elsewhere
-#                            (recommended default; equivalent to HydroLight's "aw" table)
+# The temperature correction a(T) = a(T_ref) + Ψ_T (T − T_ref) uses the
+# Röttgers, McKee & Utschig (2014) coefficients from 550 nm upward (below,
+# they are smaller than their uncertainty), referenced to each table's
+# measurement temperature (22 °C for Pope & Fry and Kou); Smith & Baker give
+# none and are not corrected.
 #
 # Scattering:
-#   Morel1974            — simple power law, salinity-independent, legacy
-#   ZhangHu2009          — modern default, depends on T, S, λ
+#   Morel1974       — power law, salinity-independent, legacy
+#   ZhangHu2009     — default; depends on T, S, λ
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -47,21 +45,29 @@ methods dispatch on `M` to pick the right one.
 """
 abstract type AbstractPureWaterAbsorptionModel end
 
-"Smith & Baker (1981). 200–800 nm, 10 nm resolution. Superseded in visible."
+"""
+Smith & Baker (1981), 200–800 nm, 10 nm resolution: upper bounds for the
+clearest natural waters. Below ~420 nm it is several times higher than
+modern pure-water measurements. No temperature correction is applied.
+"""
 struct SmithBaker1981 <: AbstractPureWaterAbsorptionModel end
 
-"Pope & Fry (1997). 380–700 nm, 2.5 nm resolution. Visible gold standard."
-struct PopeFry1997     <: AbstractPureWaterAbsorptionModel end
+"Pope & Fry (1997), 380–727.5 nm, 2.5 nm resolution, measured at 22 °C."
+struct PopeFry1997 <: AbstractPureWaterAbsorptionModel end
 
-"Mason, Cone & Fry (2016). 250–550 nm. Modern UV definitive."
-struct MasonConeFry2016 <: AbstractPureWaterAbsorptionModel end
+"Kou, Labrie & Chylek (1993), 667–2500 nm, ~1 nm resolution, measured at 22 °C."
+struct Kou1993 <: AbstractPureWaterAbsorptionModel end
 
 """
-Combined piecewise model: Mason-Cone-Fry below 380 nm, Pope-Fry in
-380–700 nm, Smith-Baker elsewhere (mainly NIR). Matches the default
-HydroLight "aw" table.
+IOCCG Protocol Series (2018) recommended pure-water absorption: Morel et al.
+(2007) for 340–415 nm, Pope & Fry (1997) for 420–725 nm and Kou et al.
+(1993) for 730–750 nm, at 5 nm resolution over 350–750 nm as used for the
+HydroLight database of Loisel et al. (2023); continued with Kou et al.
+(1993) up to 2500 nm. The composite's 730–750 nm values differ from the
+bundled Kou table by up to 0.8 % (0.06 % step at the 750 nm junction).
+The default model.
 """
-struct CombinedPopeFryMason <: AbstractPureWaterAbsorptionModel end
+struct IOCCG2018 <: AbstractPureWaterAbsorptionModel end
 
 # -----------------------------------------------------------------------------
 # Scattering-model tags
@@ -96,7 +102,7 @@ $(TYPEDFIELDS)
 # Examples
 
 ```julia
-# Default: piecewise absorption, Zhang-Hu scattering, S=35 PSU, T=20 °C
+# Default: IOCCG2018 absorption, Zhang-Hu scattering, S = 35 PSU, T = 20 °C
 water = PureWater{Float64}()
 
 # Legacy Pope-Fry + Morel combination
@@ -125,7 +131,7 @@ struct PureWater{FT,
 end
 
 function PureWater{FT}(;
-        absorption_model = CombinedPopeFryMason(),
+        absorption_model = IOCCG2018(),
         scattering_model = ZhangHu2009(),
         temperature      = FT(20),
         salinity         = FT(35),
@@ -139,7 +145,7 @@ end
 PureWater(; kwargs...) = PureWater{Float64}(; kwargs...)
 
 # Phase function interface — water scatters as depolarized Rayleigh.
-phase_function(w::PureWater{FT}) where {FT} =
+scattering_phase(w::PureWater{FT}) where {FT} =
     RayleighWaterPhase{FT}(w.depolarization)
 
 # =============================================================================
@@ -156,21 +162,19 @@ phase_function(w::PureWater{FT}) where {FT} =
 """
     absorption(w::PureWater, λ) -> FT
 
-Pure-water absorption coefficient [1/m] at wavelength `λ` [nm].
-
-Linearly interpolates the spectral table of the configured
-`absorption_model`. A small temperature correction (Pegau, Gray &
-Zaneveld 1997) is applied if the model supports it; salinity affects
-absorption only above 700 nm.
+Pure-water absorption coefficient [1/m] at wavelength `λ` [nm] from the
+configured `absorption_model`, linearly interpolated; throws outside the
+model's tabulated range. The temperature correction
+`a(T) = a(T_ref) + Ψ_T (T − T_ref)` uses the Röttgers et al. (2014)
+coefficients `Ψ_T` for `λ ≥ 550 nm` (up to 0.016 m⁻¹ K⁻¹ near 740 nm) and is
+applied relative to the table's measurement temperature `T_ref`. Salinity
+effects on absorption are not modelled.
 """
 function absorption(w::PureWater{FT, A, S}, λ::Real) where {FT, A, S}
-    # Temperature correction (Pegau, Gray & Zaneveld 1997) is blended in via
-    # the Pegau slope table, which is explicitly zero outside the calibrated
-    # 600–800 nm window — so we always-apply it without branching on λ.
-    # Branch-free form is required for AD transparency (DESIGN §12.5).
-    a₀      = _interpolate_pure_water_absorption(A(), λ)
-    ∂a_∂T   = _pegau_temperature_slope(λ)
-    return a₀ + ∂a_∂T * (w.temperature - FT(20))
+    a₀    = _interpolate_pure_water_absorption(A(), λ)
+    T_ref = _reference_temperature(A())
+    T_ref === nothing && return a₀
+    return a₀ + _temperature_coefficient(λ) * (w.temperature - FT(T_ref))
 end
 
 # Vectorized convenience
@@ -181,8 +185,7 @@ absorption(w::PureWater, λ::AbstractVector) = [absorption(w, λi) for λi in λ
 # -----------------------------------------------------------------------------
 # Loaded once at package init from `data/` via `load_spectral_csv`. The
 # provenance header on each CSV records the upstream citation, DOI, URL,
-# date accessed, and any unit conversion applied at load time — see
-# DESIGN §3.4 for the provenance-first rationale.
+# date accessed, and any unit conversion applied at load time.
 
 "Pure-water absorption, Pope & Fry (1997), 380–727.5 nm, 2.5 nm grid."
 const _POPE_FRY_1997_TABLE    = load_spectral_csv(data_path("pope_fry_1997.csv"))
@@ -190,55 +193,29 @@ const _POPE_FRY_1997_TABLE    = load_spectral_csv(data_path("pope_fry_1997.csv")
 "Pure-water absorption, Smith & Baker (1981), 200–800 nm, 10 nm grid."
 const _SMITH_BAKER_1981_TABLE = load_spectral_csv(data_path("smith_baker_1981.csv"))
 
-# Mason, Cone & Fry (2016) UV extension — optional. The Table 2 transcription
-# is NOT shipped with this release (DESIGN §8.1). `_MASON_CONE_FRY_AVAILABLE`
-# is a compile-time snapshot of data-file presence; drop
-# `data/mason_cone_fry_2016.csv` into place and restart Julia to activate.
-const _MASON_CONE_FRY_2016_PATH  = data_path("mason_cone_fry_2016.csv")
-const _MASON_CONE_FRY_AVAILABLE  = isfile(_MASON_CONE_FRY_2016_PATH)
-const _MASON_CONE_FRY_2016_TABLE = Ref{Union{Nothing, SpectralTable{Float64}}}(nothing)
+"Liquid-water absorption, Kou, Labrie & Chylek (1993), 667–2500 nm."
+const _KOU_1993_TABLE         = load_spectral_csv(data_path("kou_1993.csv"))
 
-function _mason_cone_fry_2016_table()
-    tbl = _MASON_CONE_FRY_2016_TABLE[]
-    tbl === nothing || return tbl
-    isfile(_MASON_CONE_FRY_2016_PATH) || error(
-        "MasonConeFry2016 pure-water absorption requires ",
-        "`data/mason_cone_fry_2016.csv`, which is not bundled with this ",
-        "OceanOptics.jl release. Transcribe Table 2 of Mason, Cone & Fry ",
-        "(2016), Appl. Opt. 55, 7163 (see DESIGN §8.1). Until then, use ",
-        "PopeFry1997 or CombinedPopeFryMason (which falls back to Smith-Baker ",
-        "below 380 nm when Mason data are absent).")
-    tbl = load_spectral_csv(_MASON_CONE_FRY_2016_PATH)
-    _MASON_CONE_FRY_2016_TABLE[] = tbl
-    return tbl
-end
+"IOCCG (2018) recommended pure-water absorption, 350–750 nm, 5 nm grid."
+const _IOCCG_2018_TABLE       = load_spectral_csv(data_path("ioccg_2018_pure_water.csv"))
 
-_interpolate_pure_water_absorption(::SmithBaker1981,   λ) = linterp(_SMITH_BAKER_1981_TABLE, λ)
-_interpolate_pure_water_absorption(::PopeFry1997,      λ) = linterp(_POPE_FRY_1997_TABLE,    λ)
-_interpolate_pure_water_absorption(::MasonConeFry2016, λ) = linterp(_mason_cone_fry_2016_table(), λ)
+_interpolate_pure_water_absorption(::SmithBaker1981, λ) = linterp(_SMITH_BAKER_1981_TABLE, λ)
+_interpolate_pure_water_absorption(::PopeFry1997,    λ) = linterp(_POPE_FRY_1997_TABLE,    λ)
+_interpolate_pure_water_absorption(::Kou1993,        λ) = linterp(_KOU_1993_TABLE,         λ)
+_interpolate_pure_water_absorption(::IOCCG2018, λ) =
+    λ ≤ 750 ? linterp(_IOCCG_2018_TABLE, λ) : linterp(_KOU_1993_TABLE, λ)
 
-function _interpolate_pure_water_absorption(::CombinedPopeFryMason, λ)
-    # Piecewise HydroLight-style "aw" composite. The UV segment (λ < 380 nm)
-    # prefers Mason-Cone-Fry (2016); Smith-Baker (1981), which spans 200-800
-    # nm, serves as a standing fallback until the Mason table is bundled.
-    if λ < 380
-        return _MASON_CONE_FRY_AVAILABLE ?
-                   linterp(_mason_cone_fry_2016_table(), λ) :
-                   linterp(_SMITH_BAKER_1981_TABLE, λ)
-    elseif λ ≤ 700
-        return linterp(_POPE_FRY_1997_TABLE, λ)
-    else
-        return linterp(_SMITH_BAKER_1981_TABLE, λ)
-    end
-end
+# Measurement temperature [°C] each table refers to; `nothing`: no correction.
+_reference_temperature(::SmithBaker1981) = nothing
+_reference_temperature(::PopeFry1997)    = 22.0
+_reference_temperature(::Kou1993)        = 22.0
+_reference_temperature(::IOCCG2018)      = 22.0    # Pope & Fry / Kou in 600–800 nm
 
-# Pegau, Gray & Zaneveld (1997) temperature slope `∂a/∂T` `[1/m/°C]`.
-# The bundled CSV pads the 600–800 nm calibrated window with sentinel zeros
-# at 0 nm and 10 000 nm so this interpolator returns exactly zero
-# temperature sensitivity anywhere outside [600, 800] nm — letting
-# `absorption` always-apply the correction without branching on λ.
-const _PEGAU_1997_TABLE = load_spectral_csv(data_path("pegau_1997_temperature.csv"))
-_pegau_temperature_slope(λ) = linterp(_PEGAU_1997_TABLE, λ)
+# Röttgers, McKee & Utschig (2014) temperature coefficient Ψ_T [1/(m K)],
+# 550–2500 nm; zero below 550 nm, where it is below the measurement
+# uncertainty (and crosses zero near 550 nm, so there is no step).
+const _ROTTGERS_2014_PSI_T = load_spectral_csv(data_path("rottgers_2014_temperature.csv"))
+_temperature_coefficient(λ) = λ < 550 ? zero(λ) : linterp(_ROTTGERS_2014_PSI_T, λ)
 
 # =============================================================================
 # Scattering dispatch — one method per model tag
@@ -304,13 +281,10 @@ function _zhh_refractive_index(λ_nm, Tc, S)
     λ_um = λ_nm / 1_000                      # µm, for Ciddor 1996
     n_air = 1 + (5_792_105 / (238.0185 - 1/λ_um^2) +
                  167_917   / (57.362   - 1/λ_um^2)) * 1e-8
-    # Quan-Fry 1995 seawater refractive index (w.r.t. air)
-    n0 = 1.31405;   n1 = 1.779e-4;  n2 = -1.05e-6;  n3 = 1.6e-8;    n4 = -2.02e-6
-    n5 = 15.868;    n6 = 0.01155;   n7 = -0.00423;  n8 = -4382.0;   n9 = 1.1455e6
-    nsw_rel_air = n0 + (n1 + n2*Tc + n3*Tc^2)*S + n4*Tc^2 +
-                  (n5 + n6*S + n7*Tc)/λ_nm + n8/λ_nm^2 + n9/λ_nm^3
+    # Quan-Fry 1995 seawater refractive index (w.r.t. air), refractive_index.jl
+    nsw_rel_air = _quan_fry_index(λ_nm, Tc, S)
     nsw         = nsw_rel_air * n_air         # absolute (in-vacuum) index
-    dnds        = (n1 + n2*Tc + n3*Tc^2 + n6/λ_nm) * n_air
+    dnds        = (1.779e-4 - 1.05e-6*Tc + 1.6e-8*Tc^2 + 0.01155/λ_nm) * n_air   # ∂n/∂S
     return nsw, dnds
 end
 

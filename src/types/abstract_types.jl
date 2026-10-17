@@ -22,10 +22,11 @@
 #       ├── AbstractScatterer       # defines scattering(·, λ) + phase function
 #       └── AbstractAbsorbingScatterer <: {AbstractAbsorber, AbstractScatterer}
 #
-#   AbstractPureWaterModel          # parameterization namespace
-#       ├── SmithBaker1981
+#   AbstractPureWaterAbsorptionModel   # parameterization namespace
+#       ├── IOCCG2018
 #       ├── PopeFry1997
-#       └── MasonConeFry2016         # UV extension
+#       ├── Kou1993
+#       └── SmithBaker1981
 #
 #   AbstractPhytoplanktonModel
 #       ├── Gordon1992
@@ -70,7 +71,7 @@ $(TYPEDEF)
 
 Trait for constituents that scatter light. Concrete types must implement
 [`scattering`](@ref) `(c, λ) -> FT` returning a scattering coefficient
-in `[1/m]`, plus a phase function accessible via [`phase_function`](@ref).
+in `[1/m]`, plus a phase function accessible via [`scattering_phase`](@ref).
 """
 abstract type AbstractScatterer{FT} <: AbstractOceanConstituent{FT} end
 
@@ -79,7 +80,7 @@ $(TYPEDEF)
 
 Constituents that both absorb and scatter (phytoplankton, non-algal
 particles, pure water). Must implement both [`absorption`](@ref) and
-[`scattering`](@ref), and provide a [`phase_function`](@ref).
+[`scattering`](@ref), and provide a [`scattering_phase`](@ref).
 
 Subtypes [`AbstractAbsorber`](@ref): any `AbstractAbsorbingScatterer` is
 dispatchable wherever an `AbstractAbsorber` is required. DESIGN §4.1
@@ -165,14 +166,14 @@ absorption(::AbstractScatterer{FT}, λ) where {FT} = zero(FT)
 backscattering(::AbstractAbsorber{FT}, λ) where {FT} = zero(FT)
 
 """
-    phase_function(c::AbstractScatterer) -> AbstractOceanPhaseFunction
+    scattering_phase(c::AbstractScatterer) -> AbstractOceanPhaseFunction
 
 The phase function associated with this scatterer. Returns an
 [`AbstractOceanPhaseFunction`](@ref) — the phase function itself owns the
 knowledge of what `p(μ)` and its Legendre moments are; the scatterer just
 says which one to use.
 """
-function phase_function end
+function scattering_phase end
 
 # =============================================================================
 # Inelastic processes (fluorescence, Raman) — abstract root

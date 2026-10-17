@@ -96,7 +96,7 @@ Phytoplankton{FT}(; kwargs...) where {FT<:AbstractFloat} =
     Phytoplankton{FT, Bricaud1998}(; kwargs...)
 Phytoplankton(; kwargs...) = Phytoplankton{Float64}(; kwargs...)
 
-phase_function(p::Phytoplankton) = p.phase
+scattering_phase(p::Phytoplankton) = p.phase
 
 # -----------------------------------------------------------------------------
 # Absorption — Bricaud (1998) + UV extensions

@@ -18,7 +18,7 @@ Open-ocean oligotrophic water at `Chl = 0.5 mg/m³`, surface temperature
 using OceanOptics
 
 water = PureWater{Float64}(
-    absorption_model = CombinedPopeFryMason(),
+    absorption_model = IOCCG2018(),
     scattering_model = ZhangHu2009(),
     temperature      = 20.0,
     salinity         = 35.0,
@@ -43,34 +43,36 @@ b_phyto = scattering(phyto, λ)
 
 ## Building a layer and computing the optical bundle
 
-Stack the three constituents in a 5-m surface layer and compute the
-elastic optical bundle at 10-nm resolution across the visible:
+Stack the three constituents in a 5-m surface layer and compute its
+optical properties at 10-nm resolution across the visible. The result
+holds the absorption optical depth and one scattering component per
+scattering constituent (here water and phytoplankton; CDOM only absorbs):
 
 ```@example ex
 layer = OceanLayer(0.0, 5.0,
                    AbstractOceanConstituent{Float64}[water, cdom, phyto])
 λ_grid = collect(400.0:10.0:700.0)
 opt    = layer_optics(layer, λ_grid; ℓ_max = 32)
-opt
+[(c.label, c.polarization) for c in opt.components]
 ```
 
-Inspect the single-scattering albedo and the backscatter fraction
-across the spectrum:
+Mixed quantities are derived from the components:
 
 ```@example ex
 using Printf
+τ, ϖ, B = optical_depth(opt), single_scattering_albedo(opt), backscatter_fraction(opt)
 println(" λ [nm]   τ         ϖ         B")
-for i in eachindex(opt.λ)
-    @printf("%6.0f  %.5f   %.4f   %.4f\n",
-            opt.λ[i], opt.τ[i], opt.ϖ[i], opt.B[i])
+for i in 1:5:length(λ_grid)
+    @printf("%6.0f  %.5f   %.4f   %.4f\n", λ_grid[i], τ[i], ϖ[i], B[i])
 end
 ```
 
-The Legendre-moment matrix `opt.β` has size `(ℓ_max+1, n_λ)` with
-`β_0 ≡ 1` by construction:
+Each component carries its own expansion; the mixture at a wavelength
+is their scattering-weighted average, with `β₀ = 1`:
 
 ```@example ex
-size(opt.β), opt.β[1, 1], opt.β[2, 1], opt.β[3, 1]
+mixed = greek_expansion(opt, 1)
+(n_moments(mixed), mixed.β[1], mixed.β[2] / 3)   # terms, β₀, asymmetry parameter at 400 nm
 ```
 
 ## Multi-layer column via the Fell (1997) grid
@@ -88,6 +90,17 @@ column = fell_column(AbstractOceanConstituent{Float64}[water, cdom, phyto];
 layer_thicknesses(column)
 ```
 
+For a coupled solver, [`column_optics`](@ref) evaluates every layer on
+one grid and adds the interface refractive index and the bottom; both
+must be chosen explicitly:
+
+```@example ex
+col = column_optics(column, [450.0, 550.0, 650.0];
+                    refractive_index = QuanFry1995(temperature = 20.0, salinity = 35.0),
+                    bottom = BlackBottom(), ℓ_max = 32)
+(n_layers(col), col.refractive_index)
+```
+
 ## Inelastic kernels
 
 Chlorophyll-a fluorescence is built from the phytoplankton absorber
@@ -101,7 +114,14 @@ sif
 ```
 
 ```@example ex
-excitation_absorption(sif, 440.0)           # φ · a_φ(440)
+excitation_absorption(sif, 440.0)           # φ · a_φ(440): photons, yield included
+```
+
+[`radiance_source_kernel`](@ref) adds the photon-energy ratio `λ'/λ`
+needed for an energy (radiance) source:
+
+```@example ex
+radiance_source_kernel(sif, 440.0, 685.0) / inelastic_coefficient(sif, 440.0, 685.0)
 ```
 
 The emission density peaks at 685 nm with FWHM ≈ 25 nm:

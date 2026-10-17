@@ -57,11 +57,13 @@ phyto = Phytoplankton{Float64, Bricaud1998}(Chl = 0.5)
 layer = OceanLayer(0.0, 5.0,
                    AbstractOceanConstituent{Float64}[water, cdom, phyto])
 
-# 2. Compute the elastic bundle over a wavelength grid
+# 2. Optical properties on a wavelength grid: absorption plus one
+#    scattering component per constituent
 opt = layer_optics(layer, collect(400.0:5.0:700.0); ℓ_max = 32)
-opt.τ   # optical depth per λ
-opt.ϖ   # single-scattering albedo per λ
-opt.β   # Legendre moments β_ℓ(λ), size (ℓ_max+1, n_λ)
+optical_depth(opt)              # τ per λ
+single_scattering_albedo(opt)   # ϖ per λ
+opt.components[2].greek         # phytoplankton expansion (GreekCoefficients)
+greek_expansion(opt, 1)         # mixed expansion at 400 nm
 
 # 3. Inelastic kernels for a downstream two-pass RT solver
 sif = chlorophyll_fluorescence(phyto)
@@ -77,9 +79,15 @@ For a longer walk-through with numerical output, see
 * **Materials**: [`PureWater`](@ref), [`CDOM`](@ref),
   [`Phytoplankton`](@ref), [`NonAlgalParticles`](@ref). See
   [Materials](@ref).
-* **Phase functions**: [`RayleighWaterPhase`](@ref),
+* **Phase functions and matrices**: [`RayleighWaterPhase`](@ref),
   [`FournierForandPhase`](@ref), [`HenyeyGreensteinPhase`](@ref),
-  [`PetzoldPhase`](@ref). See [Phase functions](@ref).
+  [`PetzoldPhase`](@ref), [`TabulatedGreekPhase`](@ref),
+  [`TabulatedMuellerPhase`](@ref), [`WavelengthDependentPhase`](@ref),
+  expanded as [`GreekCoefficients`](@ref). See [Phase functions](@ref).
+* **Solver output**: [`layer_optics`](@ref) → [`OceanLayerOptics`](@ref),
+  [`column_optics`](@ref) → [`OceanColumnOptics`](@ref) with the
+  interface [`refractive_index`](@ref) and bottom. See
+  [Consumer API](@ref) and [vSmartMOM integration](@ref).
 * **Inelastic processes**: [`IsotropicFluorescence`](@ref),
   [`CDOMFluorescence`](@ref), [`WaterRaman`](@ref). See
   [Inelastic processes](@ref).
@@ -95,5 +103,5 @@ inelastic source kernels from biogeochemical state. It is AD-transparent
 through ForwardDiff.
 
 OceanOptics.jl **does not** solve radiative transfer. That work lives
-in the consumer (e.g. `vSmartMOM.jl`) which imports our types and
-builds its own `OceanSurface <: AbstractSurfaceType`.
+in the consumer (e.g. `vSmartMOM.jl`), which maps the column optics onto
+its own layer operators and refracting interface.

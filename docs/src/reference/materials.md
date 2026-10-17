@@ -4,18 +4,30 @@
 
 ```@docs
 PureWater
-SmithBaker1981
+AbstractPureWaterAbsorptionModel
+AbstractPureWaterScatteringModel
+IOCCG2018
 PopeFry1997
-MasonConeFry2016
-CombinedPopeFryMason
+Kou1993
+SmithBaker1981
 Morel1974
 ZhangHu2009
+```
+
+## Refractive index of seawater
+
+```@docs
+AbstractRefractiveIndexModel
+FixedRefractiveIndex
+QuanFry1995
+refractive_index
 ```
 
 ## CDOM
 
 ```@docs
 CDOM
+AbstractCDOMModel
 BricaudMorelPrieur1981
 ```
 
@@ -23,6 +35,7 @@ BricaudMorelPrieur1981
 
 ```@docs
 Phytoplankton
+AbstractPhytoplanktonModel
 Bricaud1998
 Gordon1992
 ```
@@ -31,6 +44,7 @@ Gordon1992
 
 ```@docs
 NonAlgalParticles
+AbstractNAPModel
 BabinBricaud2003
 FellMineral
 ```
@@ -53,5 +67,5 @@ absorption
 scattering
 backscattering
 attenuation
-phase_function
+scattering_phase
 ```

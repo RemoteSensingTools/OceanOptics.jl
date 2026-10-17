@@ -1,3 +1,11 @@
+> **Historical design memo (April 2026).** Parts of it describe plans
+> that were later changed or are now implemented differently — e.g. the
+> solver output is component based (`OceanLayerOptics` with
+> `ScatteringComponent`s, `OceanColumnOptics`), phase matrices use
+> `GreekCoefficients`, and the default water absorption is `IOCCG2018`.
+> The documentation (Consumer API page) is authoritative for the current
+> interface.
+
 # OceanOptics.jl — Design Memo
 
 Version 0.1 · Draft · April 2026

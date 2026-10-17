@@ -21,9 +21,9 @@
 # Legendre moments are closed-form: β₀ = 1, β₂ = (1-σ)/(10·(...)),
 # all other β_ℓ = 0 for ℓ ≠ 0, 2.
 #
-# For polarized RT, the full Greek-coefficient expansion (α, γ, δ, ϵ, ζ)
-# has a closed form in terms of σ (Hansen & Travis 1974). A future
-# `polarized_moments(pf) -> GreekCoefs` method can extend this.
+# The full phase matrix also has a closed-form Greek expansion (Hansen &
+# Travis 1974), available through `greek_expansion(pf, ℓ_max;
+# polarized = true)`.
 # =============================================================================
 
 """
@@ -88,44 +88,28 @@ function phase_function_moments(pf::RayleighWaterPhase{FT}, ℓ_max::Integer) wh
     return β
 end
 
-"""
-    phase_matrix_moments(pf::RayleighWaterPhase, ℓ_max) -> NamedTuple
-
-Closed-form polarized Greek expansion of the depolarized Rayleigh phase
-matrix (Hansen & Travis 1974; Sanghavi 2014 Eq. 16). Only ℓ ∈ {0, 1, 2}
-carries non-zero moments:
-
-```
-β[0] = 1                     α[2] = 3·dpl_p
-β[2] = ½·dpl_p               γ[2] = √(3/2)·dpl_p
-δ[1] = (3/2)·dpl_p·dpl_r     ϵ[ℓ] = ζ[ℓ] = 0
-
-dpl_p = (1 − ρ)/(1 + ρ/2)
-dpl_r = (1 − 2ρ)/(1 − ρ)
-```
-
-with `ρ = pf.depolarization` the Cabannes depolarization ratio.
-"""
-function phase_matrix_moments(pf::RayleighWaterPhase{FT}, ℓ_max::Integer) where {FT}
+# Closed-form polarized Greek expansion of the depolarized Rayleigh phase
+# matrix (Hansen & Travis 1974; Sanghavi 2014 Eq. 16), identical to
+# vSmartMOM's `get_greek_rayleigh`. Only ℓ ∈ {0, 1, 2} are non-zero:
+#
+#   β₀ = 1,  β₂ = ½·dpl_p,  α₂ = 3·dpl_p,  γ₂ = √(3/2)·dpl_p,
+#   δ₁ = (3/2)·dpl_p·dpl_r,  ϵ = ζ = 0,
+#   dpl_p = (1 − ρ)/(1 + ρ/2),  dpl_r = (1 − 2ρ)/(1 − ρ).
+function _polarized_greek(pf::RayleighWaterPhase{FT}, ℓ_max::Integer) where {FT}
     ℓ_max ≥ 0 || throw(ArgumentError("ℓ_max must be non-negative, got $ℓ_max"))
     N = ℓ_max + 1
     α = zeros(FT, N); β = zeros(FT, N); γ = zeros(FT, N)
     δ = zeros(FT, N); ϵ = zeros(FT, N); ζ = zeros(FT, N)
-
-    ρ     = pf.depolarization
-    dpl_p = _rayleigh_dpl_p(ρ)
-    dpl_r = _rayleigh_dpl_r(ρ)
-
-    β[1] = one(FT)                                 # ℓ = 0
-    if ℓ_max ≥ 1
-        δ[2] = FT(1.5) * dpl_p * dpl_r             # ℓ = 1
-    end
+    dpl_p = _rayleigh_dpl_p(pf.depolarization)
+    dpl_r = _rayleigh_dpl_r(pf.depolarization)
+    β[1] = one(FT)
+    ℓ_max ≥ 1 && (δ[2] = FT(1.5) * dpl_p * dpl_r)
     if ℓ_max ≥ 2
-        α[3] = FT(3) * dpl_p                       # ℓ = 2
+        α[3] = FT(3) * dpl_p
         β[3] = FT(0.5) * dpl_p
         γ[3] = dpl_p * sqrt(FT(1.5))
     end
-    return (α = α, β = β, γ = γ, δ = δ, ϵ = ϵ, ζ = ζ)
+    return GreekCoefficients{FT}(α, β, γ, δ, ϵ, ζ)
 end
 
 function backscatter_fraction(pf::RayleighWaterPhase{FT}) where {FT}
