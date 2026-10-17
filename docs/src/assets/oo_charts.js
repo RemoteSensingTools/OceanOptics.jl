@@ -61,7 +61,9 @@
   function seriesColor(pal, ds, k, spec) {
     if (ds.reference) return pal.reference;
     if (spec.ordinal) return ordinal(pal.ordinal, k, spec.datasets.length);
-    return pal.series[(ds.slot !== undefined ? ds.slot : k) % pal.series.length];
+    // `slot` arrives as null when not pinned; fall back to the series order.
+    var slot = typeof ds.slot === "number" ? ds.slot : k;
+    return pal.series[slot % pal.series.length];
   }
 
   function style(chart, spec) {
