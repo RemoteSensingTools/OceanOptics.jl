@@ -102,13 +102,13 @@ end
 phytos = [Phytoplankton{Float64, Bricaud1998}(Chl = Chl) for Chl in Chls]
 linechart([Series("Chl = $Chl mg/m³", λ, total_a(p)) for (Chl, p) in zip(Chls, phytos)];
           title = "Total absorption a = a_w + a_g + a_φ", xlabel = "wavelength λ [nm]",
-          ylabel = "a(λ) [m⁻¹]", xname = "λ [nm]", ylog = true, ordinal = true)
+          ylabel = "a(λ) [m⁻¹]", xname = "λ [nm]", ylog = true)
 ```
 
 ```@example gallery
 linechart([Series("Chl = $Chl mg/m³", λ, total_b(p)) for (Chl, p) in zip(Chls, phytos)];
           title = "Total scattering b = b_w + b_p", xlabel = "wavelength λ [nm]",
-          ylabel = "b(λ) [m⁻¹]", xname = "λ [nm]", ylog = true, ordinal = true)
+          ylabel = "b(λ) [m⁻¹]", xname = "λ [nm]", ylog = true)
 ```
 
 ## 4. Layer optics `τ, ϖ, B` for a 5-m Case-1 layer
@@ -145,34 +145,35 @@ linechart([Series("B", opt.λ, backscatter_fraction(opt))]; title = "Backscatter
 
 ## 5. Phase-function comparison — Fournier-Forand vs Henyey-Greenstein vs Rayleigh-water
 
-Comparison target: Mobley, Sundman & Boss (2002) Fig. 1 (Fournier-
-Forand at several backscatter fractions vs. Petzold) and Hansen &
-Travis (1974) Fig. 7 for the Rayleigh-with-depolarization shape.
-Fournier-Forand should be strongly forward-peaked and fall off faster
-than Henyey-Greenstein at intermediate angles; pure Rayleigh is
-symmetric forward / back with a p(90°) minimum.
+Comparison target: Mobley, Sundman & Boss (2002) Fig. 1 (Fournier-Forand
+vs. Petzold's measurements) and Hansen & Travis (1974) for the Rayleigh
+shape. On log–log axes, Fournier-Forand with the Petzold-average
+backscatter fraction `B = 0.0183` should follow the Petzold (1972) data
+(points; San Diego Harbor, `B ≈ 0.02`) over five decades, rising as a
+power law toward the forward direction (it diverges as θ → 0). Henyey-
+Greenstein with a similar asymmetry parameter has a flat top below ~2° and
+too little scattering in the near forward; Rayleigh-water is nearly flat.
 
 ```@example gallery
-μ   = collect(-1.0:0.01:1.0)
+θ_deg = 10 .^ range(-1, log10(180); length = 241)        # 0.1° … 180°
+μ     = cosd.(θ_deg)
 
-pf_ff   = FournierForandPhase{Float64}(backscatter_fraction = 0.018)
+pf_ff   = FournierForandPhase{Float64}(backscatter_fraction = 0.0183)
 pf_hg95 = HenyeyGreensteinPhase{Float64}(g = 0.95)
 pf_hg50 = HenyeyGreensteinPhase{Float64}(g = 0.50)
 pf_ray  = RayleighWaterPhase{Float64}(depolarization = 0.039)
+petzold = PetzoldPhase{Float64}()
 
-ff   = [phase_function_value(pf_ff,   μi) for μi in μ]
-hg95 = [phase_function_value(pf_hg95, μi) for μi in μ]
-hg50 = [phase_function_value(pf_hg50, μi) for μi in μ]
-ray  = [phase_function_value(pf_ray,  μi) for μi in μ]
-
-θ_deg = rad2deg.(acos.(μ))
-linechart([Series("Fournier-Forand, B = 0.018", θ_deg, ff),
-           Series("Henyey-Greenstein, g = 0.95", θ_deg, hg95),
-           Series("Henyey-Greenstein, g = 0.50", θ_deg, hg50),
-           Series("Rayleigh-water, ρ = 0.039", θ_deg, ray)];
+value(pf) = [phase_function_value(pf, μi) for μi in μ]
+linechart([Series("Petzold (1972), San Diego Harbor", rad2deg.(petzold.θ), petzold.p;
+                  points = true, reference = true),
+           Series("Fournier-Forand, B = 0.0183", θ_deg, value(pf_ff)),
+           Series("Henyey-Greenstein, g = 0.95", θ_deg, value(pf_hg95); dash = true),
+           Series("Henyey-Greenstein, g = 0.50", θ_deg, value(pf_hg50); dot = true),
+           Series("Rayleigh-water, ρ = 0.039", θ_deg, value(pf_ray))];
           title = "Phase functions for ocean scattering",
-          xlabel = "scattering angle θ [deg]", ylabel = "p(θ)", xname = "θ [deg]",
-          ylog = true, digits = 4)
+          xlabel = "scattering angle θ [deg]", ylabel = "p(θ)  (∫p dΩ/4π = 1)",
+          xname = "θ [deg]", xlog = true, ylog = true, digits = 4)
 ```
 
 ## 6. Chlorophyll fluorescence emission spectrum
@@ -187,14 +188,11 @@ phyto = Phytoplankton{Float64, Bricaud1998}(Chl = 0.5)
 sif   = chlorophyll_fluorescence(phyto)
 
 λ_emit = collect(640.0:1.0:740.0)
-f_exc  = [(λ′, [emission(sif, λ′, λ) for λ in λ_emit]) for λ′ in (400.0, 500.0, 600.0)]
-
-# The three curves coincide (excitation-independent band); dashes keep
-# them distinguishable where they overlap.
-styles = ((dash = false, dot = false), (dash = true, dot = false), (dash = false, dot = true))
-linechart([[Series("λ' = $(Int(λ′)) nm", λ_emit, y; st...)
-            for ((λ′, y), st) in zip(f_exc, styles)];
-           Series("peak = 685 nm", [685.0, 685.0], [0.0, maximum(last(f_exc[1]))];
+f(λ′)  = [emission(sif, λ′, λ) for λ in λ_emit]
+# The band does not depend on the excitation wavelength in 400–700 nm:
+println("max |f(400, λ) − f(600, λ)| = ", maximum(abs, f(400.0) .- f(600.0)))
+linechart([Series("emission density f(λ', λ), any λ' in 400–700 nm", λ_emit, f(440.0)),
+           Series("peak = 685 nm", [685.0, 685.0], [0.0, maximum(f(440.0))];
                   reference = true, dot = true)];
           title = "Chlorophyll fluorescence emission (Fell 1997, Fig. 5.5)",
           xlabel = "emission wavelength λ [nm]", ylabel = "f(λ', λ) [nm⁻¹]",
@@ -219,5 +217,5 @@ linechart([Series("λ' = $(Int(round(λ′))) nm (peak $(round(Int, raman_peak_w
                   λ_emit, [emission(ram, λ′, λ) for λ in λ_emit]) for λ′ in λ_excs];
           title = "Water Raman emission — Stokes shift = 3400 cm⁻¹",
           xlabel = "emission wavelength λ [nm]", ylabel = "f_R(λ', λ) [nm⁻¹]",
-          xname = "λ [nm]", ordinal = true)
+          xname = "λ [nm]")
 ```

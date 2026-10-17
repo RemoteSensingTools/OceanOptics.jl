@@ -63,6 +63,9 @@ function linechart(series::AbstractVector{Series}; xlabel = "", ylabel = "", tit
     print(io, """<div class="oo-chart" style="position:relative;height:$(height)px;margin:1em 0">""",
           """<canvas id="$id" role="img" aria-label="$(_html(title == "" ? ylabel : title))"></canvas></div>""",
           """<script>OOCharts.line("$id", """, _json(spec), ");</script>")
+    length(series) > 1 &&
+        print(io, """<p style="font-size:0.8em;opacity:0.7;margin:-0.6em 0 0.4em 0">""",
+              "Click a legend entry to hide or show that series; hover for values.</p>")
     table && _table(io, series, xname, digits)
     return HTML(String(take!(io)))
 end

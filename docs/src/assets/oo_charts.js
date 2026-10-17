@@ -101,6 +101,9 @@
     var datasets = spec.datasets.map(function (d) {
       return {
         label: d.label,
+        // Dashed, dotted and point series are drawn on top of solid lines, so
+        // coincident curves remain visible through the gaps.
+        order: (d.dash || d.dot || d.points) ? 0 : 1,
         data: d.x.map(function (x, i) { return { x: x, y: d.y[i] }; }),
         showLine: !d.points,
         borderWidth: 2,
@@ -143,9 +146,15 @@
           legend: {
             display: spec.datasets.length > 1,
             position: "bottom",
-            labels: { usePointStyle: true, boxHeight: 6 }
+            labels: {
+              usePointStyle: true, boxHeight: 6,
+              sort: function (a, b) { return a.datasetIndex - b.datasetIndex; }
+            },
+            onHover: function (e) { e.native.target.style.cursor = "pointer"; },
+            onLeave: function (e) { e.native.target.style.cursor = "default"; }
           },
           tooltip: {
+            itemSort: function (a, b) { return a.datasetIndex - b.datasetIndex; },
             callbacks: {
               title: function (items) {
                 return items.length ? (spec.xname || "x") + " = " + fmt(items[0].parsed.x) : "";
