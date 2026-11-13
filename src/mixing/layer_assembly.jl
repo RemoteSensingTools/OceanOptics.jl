@@ -3,19 +3,23 @@
 # =============================================================================
 #
 # For one layer and wavelength grid:
-#   1. absorption optical depth τ_abs = Σ_c a_c Δz over all constituents
-#      (with the total-absorption exclusivity rule);
+#   1. one AbsorptionComponent per absorber and absorption part:
+#      τ = a_part Δz (with the total-absorption exclusivity rule);
 #   2. one ScatteringComponent per scattering constituent: τ_c = b_c Δz, the
 #      phase function's expansion (once, or per wavelength if it depends on
-#      wavelength), its backscatter fraction and a polarization label.
+#      wavelength), its backscatter fraction and a polarization label;
+#   3. one InelasticComponent per inelastic process, linked to the
+#      absorption components of its excitation pathways.
 # =============================================================================
 
 """
-    layer_optics(layer, λ; ℓ_max = 64, polarized = false,
-                 scalar_phase_approximation = nothing, FT = Float64) -> OceanLayerOptics
+    layer_optics([FT,] layer, λ; ℓ_max = 64, polarized = false,
+                 scalar_phase_approximation = nothing) -> OceanLayerOptics{FT}
 
-Optical properties of one [`OceanLayer`](@ref) at wavelengths `λ` `[nm]`
-(strictly monotone, increasing or decreasing).
+Compute the optical properties of one [`OceanLayer`](@ref) at wavelengths `λ` `[nm]`.
+
+`λ` is strictly monotone, increasing or decreasing. The element type `FT` of the result
+defaults to that of `layer`.
 
 # Keywords
 - `ℓ_max` — highest expansion order. The expansions are exact through
@@ -29,21 +33,26 @@ Optical properties of one [`OceanLayer`](@ref) at wavelengths `λ` `[nm]`
   completely depolarizing approximation, labelled `:depolarizing` on the
   component. Applies to every such scatterer, even one with zero
   scattering. Ignored when `polarized = false`.
-- `FT` — floating-point type of the result.
 
 # Result
-An [`OceanLayerOptics`](@ref) with the absorption optical depth and one
-[`ScatteringComponent`](@ref) per scattering constituent, in constituent
-order. Mixed quantities follow from [`optical_depth`](@ref),
-[`single_scattering_albedo`](@ref) and
+An [`OceanLayerOptics`](@ref) with, in constituent order,
+- one [`AbsorptionComponent`](@ref) per absorbing constituent and
+  absorption part (see [`absorption_parts`](@ref): one part, `:total`,
+  unless e.g. phytoplankton carries a pigment partition);
+- one [`ScatteringComponent`](@ref) per scattering constituent;
+- one [`InelasticComponent`](@ref) per process in `layer.inelastic`, with
+  the indices of the absorption components that excite it.
+Mixed quantities follow from [`absorption_optical_depth`](@ref),
+[`optical_depth`](@ref), [`single_scattering_albedo`](@ref) and
 [`greek_expansion`](@ref)`(o, iλ)`.
 
 If a constituent declares [`is_total_absorption`](@ref) (a
 `TabulatedAbsorber` with `total = true`), it must be the only one, and
 every other constituent must have zero absorption at every wavelength.
 
-Inelastic processes in `layer.fluorophores` are not included; they are
-source terms for the solver (see the *Consumer API* docs page).
+Every absorber that excites a fluorescence process must itself be a
+constituent of the layer (the same object, or an equal one): otherwise its
+absorption would drive emission without attenuating the light.
 
 # Example
 ```julia
@@ -52,24 +61,34 @@ phyto = Phytoplankton{Float64, Bricaud1998}(Chl = 0.5)
 layer = OceanLayer(0.0, 5.0, AbstractOceanConstituent{Float64}[water, phyto])
 opt   = layer_optics(layer, collect(400.0:5.0:700.0); ℓ_max = 64)
 optical_depth(opt), single_scattering_albedo(opt)
-opt.components[2].label               # "Phytoplankton"
+opt.scatterers[2].label               # "Phytoplankton"
 ```
 """
-function layer_optics(layer::OceanLayer, λ_grid::AbstractVector{<:Real};
+function layer_optics(::Type{FT}, layer::OceanLayer, λ_grid::AbstractVector{<:Real};
                       ℓ_max::Integer = 64,
                       polarized::Bool = false,
-                      scalar_phase_approximation::Union{Nothing, Symbol} = nothing,
-                      FT::Type{<:AbstractFloat} = Float64)
+                      scalar_phase_approximation::Union{Nothing, Symbol} = nothing) where {FT<:Real}
+    _check_parameter_type(FT)
     return _layer_optics(layer, λ_grid, ℓ_max, polarized, scalar_phase_approximation, FT,
-                         Dict{Any, Any}())
+                         _expansion_cache(FT))
 end
 
-# `cache` maps (phase_id, ℓ_max, FT, phase key) to (expansion, backscatter
-# fraction), so that each distinct expansion is computed once — per layer,
-# or per column when `column_optics` shares it between layers (which then
-# share the same GreekCoefficients objects).
+layer_optics(layer::OceanLayer{T}, λ_grid::AbstractVector{<:Real}; kwargs...) where {T} =
+    layer_optics(T, layer, λ_grid; kwargs...)
+
+# Key of one expansion: (phase function identity, polarization label, ℓ_max,
+# phase key); the phase key is `nothing` for a wavelength-independent phase.
+const _ExpansionKey = Tuple{UInt, Symbol, Int, Any}
+
+# Maps an `_ExpansionKey` to (expansion, backscatter fraction), so that each
+# expansion is computed once — per layer, or per column when `column_optics`
+# shares the cache between layers (which then share the same
+# GreekCoefficients objects). One cache serves one element type.
+_expansion_cache(::Type{FT}) where {FT} =
+    Dict{_ExpansionKey, Tuple{GreekCoefficients{FT, Vector{FT}}, FT}}()
+
 function _layer_optics(layer::OceanLayer, λ_grid, ℓ_max, polarized,
-                       scalar_phase_approximation, FT, cache)
+                       scalar_phase_approximation, ::Type{FT}, cache) where {FT}
     ℓ_max ≥ 0 || throw(ArgumentError("ℓ_max must be non-negative, got $ℓ_max"))
     scalar_phase_approximation in (nothing, :depolarizing) ||
         throw(ArgumentError("scalar_phase_approximation must be `nothing` or " *
@@ -80,23 +99,51 @@ function _layer_optics(layer::OceanLayer, λ_grid, ℓ_max, polarized,
                             "strictly monotone"))
     Δz = FT(thickness(layer))
     constituents = layer.constituents
+    n_water = count(c -> c isa PureWater, constituents)
+    n_water ≤ 1 ||
+        throw(ArgumentError("layer_optics: the layer lists PureWater $n_water times, which " *
+                            "would count the water absorption and scattering $n_water " *
+                            "times; check the constituent list and keep one PureWater"))
 
-    # --- absorption ---------------------------------------------------------
-    i_total = findall(is_total_absorption, constituents)
+    # --- absorption components -----------------------------------------------
+    absorbing = [c for c in constituents if c isa AbstractAbsorber]
+    i_total   = findall(is_total_absorption, absorbing)
     length(i_total) ≤ 1 ||
         throw(ArgumentError("layer_optics: $(length(i_total)) constituents declare total " *
                             "(bulk) absorption; at most one can"))
-    i_bulk = isempty(i_total) ? 0 : only(i_total)
-    τ_abs  = zeros(FT, length(λ))
-    for (i, c) in enumerate(constituents), (k, λk) in enumerate(λ)
-        a = FT(absorption(c, λk))
-        if i_bulk != 0 && i != i_bulk && a != 0
-            throw(ArgumentError("layer_optics: $(constituents[i_bulk]) is the total " *
-                                "absorption of the layer, but $(nameof(typeof(c))) also " *
-                                "absorbs (a = $a 1/m at λ = $λk nm); this would count " *
-                                "its absorbers twice"))
+    i_bulk::Int = isempty(i_total) ? 0 : only(i_total)
+    absorbers = AbsorptionComponent{FT, Vector{FT}}[]
+    first_part = Int[]            # index of each absorber's first component
+    for (i, c) in enumerate(absorbing)
+        parts = absorption_parts(c)
+        τ     = zeros(FT, length(parts), length(λ))
+        for (k, λk) in enumerate(λ)
+            a = absorption_by_part(c, λk)
+            if i_bulk != 0 && i != i_bulk && any(!iszero, a)::Bool
+                throw(ArgumentError("layer_optics: $(absorbing[i_bulk]) is the total " *
+                                    "absorption of the layer, but $(nameof(typeof(c))) also " *
+                                    "absorbs (a = $(sum(a)) 1/m at λ = $λk nm); this would " *
+                                    "count its absorbers twice"))
+            end
+            for j in eachindex(parts)
+                τ[j, k] = FT(a[j]) * Δz
+            end
         end
-        τ_abs[k] += a * Δz
+        push!(first_part, length(absorbers) + 1)
+        for (j, part) in enumerate(parts)
+            push!(absorbers, AbsorptionComponent{FT, Vector{FT}}(_component_label(c), part, τ[j, :]))
+        end
+    end
+
+    # --- inelastic components ---------------------------------------------
+    inelastic = map(layer.inelastic) do p
+        pathways = excitation_pathways(p)
+        index    = map(pathways) do x
+            i = _matching_absorber(absorbing, x.absorber, p, layer)
+            first_part[i] + findfirst(==(x.part), absorption_parts(absorbing[i])) - 1
+        end
+        InelasticComponent{FT}(string(nameof(typeof(p))), p, collect(Int, index),
+                               FT[x.efficiency for x in pathways])
     end
 
     # --- scattering components -------------------------------------------
@@ -112,26 +159,26 @@ function _layer_optics(layer::OceanLayer, λ_grid, ℓ_max, polarized,
                                 "a TabulatedMuellerPhase or polarized TabulatedGreekPhase) or " *
                                 "pass `scalar_phase_approximation = :depolarizing`."))
     end
-    components = [_scattering_component(c, λ, Δz, ℓ_max, polarized, FT, cache)
-                  for c in scatterers]
-    return OceanLayerOptics{FT}(λ, FT(layer.depth_top), FT(layer.depth_bottom), τ_abs,
-                                components, ℓ_max + 1, polarized)
+    components = ScatteringComponent{FT, Vector{FT}, Vector{Int}}[
+        _scattering_component(c, λ, Δz, ℓ_max, polarized, FT, cache) for c in scatterers]
+    return OceanLayerOptics{FT, Vector{FT}, Vector{Int}}(
+        λ, FT(layer.depth_top), FT(layer.depth_bottom), absorbers, components,
+        collect(InelasticComponent{FT}, inelastic), ℓ_max + 1, polarized)
 end
 
 function _scattering_component(c, λ::Vector{FT}, Δz::FT, ℓ_max, polarized, ::Type{FT},
                                cache) where {FT}
     pf    = scattering_phase(c)
     label = !polarized ? :scalar : is_polarizable(pf) ? :full : :depolarizing
-    pid   = hash((objectid(pf), label))
     expand(args...) = label === :scalar ? greek_expansion(pf, ℓ_max, args...) :
                       label === :full   ? greek_expansion(pf, ℓ_max, args...; polarized = true) :
                                           depolarizing_greek_expansion(pf, ℓ_max, args...)
-    entry(key, args...) = get!(cache, (pid, ℓ_max, FT, key)) do
+    entry(key, args...) = get!(cache, (objectid(pf), label, Int(ℓ_max), key)) do
         (_convert_greek(FT, expand(args...)), FT(backscatter_fraction(pf, args...)))
     end
     if is_wavelength_dependent(pf)
         keys  = [_phase_key(pf, λk) for λk in λ]
-        slot  = Dict{Any, Int}()
+        slot  = Dict{eltype(keys), Int}()
         first_λ = Int[]
         for (k, key) in enumerate(keys)
             haskey(slot, key) || (slot[key] = length(slot) + 1; push!(first_λ, k))
@@ -142,53 +189,103 @@ function _scattering_component(c, λ::Vector{FT}, Δz::FT, ℓ_max, polarized, :
         entries = [entry(nothing)]
         index   = Int[]
     end
-    greek = [e[1] for e in entries]
-    B     = [e[2] for e in entries]
-    τ     = [FT(scattering(c, λk)) * Δz for λk in λ]
-    return ScatteringComponent{FT}(_component_label(c), pid, τ, greek, B, index, label)
+    greek = GreekCoefficients{FT, Vector{FT}}[e[1] for e in entries]
+    B     = FT[e[2] for e in entries]
+    τ     = FT[FT(scattering(c, λk)) * Δz for λk in λ]
+    return ScatteringComponent{FT, Vector{FT}, Vector{Int}}(_component_label(c), τ, greek, B,
+                                                            index, label)
 end
 
 _component_label(c::AbstractOceanConstituent) = string(nameof(typeof(c)))
+
+# The constituent of the layer that is the exciting absorber: the same object,
+# or else an equal one; it must be unique, so that excitation is attributed
+# to one absorption component.
+function _matching_absorber(absorbing, absorber, p, layer)
+    where_ = "$(nameof(typeof(p))) in the layer at $(layer.depth_top)–$(layer.depth_bottom) m"
+    i = findall(c -> c === absorber, absorbing)
+    isempty(i) && (i = findall(c -> isequal(c, absorber), absorbing))
+    isempty(i) &&
+        throw(ArgumentError("layer_optics: $where_ is excited by $absorber, which is not a " *
+                            "constituent of that layer. Add it to the constituents, so that " *
+                            "the light it absorbs is also removed from the radiation field."))
+    length(i) == 1 ||
+        throw(ArgumentError("layer_optics: $where_ is excited by $absorber, which appears " *
+                            "$(length(i)) times among the constituents; merge the equal " *
+                            "constituents into one"))
+    return only(i)
+end
 
 _convert_greek(::Type{FT}, g::GreekCoefficients{FT}) where {FT} = g
 _convert_greek(::Type{FT}, g::GreekCoefficients) where {FT} =
     GreekCoefficients{FT}((FT.(getfield(g, f)) for f in fieldnames(GreekCoefficients))...)
 
 """
-    column_optics(column, λ; refractive_index, bottom, ℓ_max = 64, polarized = false,
-                  scalar_phase_approximation = nothing, FT = Float64) -> OceanColumnOptics
+    column_optics([FT,] column, λ; refractive_index, bottom, ℓ_max = 64,
+                  polarized = false,
+                  scalar_phase_approximation = nothing) -> OceanColumnOptics{FT}
 
-Optical description of an [`OceanColumn`](@ref) for a coupled
-atmosphere–ocean solver: [`layer_optics`](@ref) for every layer on the
-same grid and settings, the interface refractive index, and the bottom.
+Compute the optical description of an [`OceanColumn`](@ref) for a coupled
+atmosphere–ocean solver.
+
+The result holds [`layer_optics`](@ref) of every layer on the same grid and settings,
+the interface refractive index, and the bottom. The element type `FT` defaults to that
+of `column`.
 
 Components with the same phase function and polarization treatment share
-one `phase_id` and the same expansion objects across layers.
+the same expansion objects across layers; their `phase_id` keys are equal
+because the coefficients are.
+
+The model is evaluated on the host; the result holds `Vector`s. Move it to
+a device with `Adapt.adapt(to, col)` (see [`OceanColumnOptics`](@ref)).
 
 `refractive_index` (an [`AbstractRefractiveIndexModel`](@ref), e.g.
 `FixedRefractiveIndex(1.34)` or `QuanFry1995(; temperature, salinity)`)
-and `bottom` (`BlackBottom()` or `LambertianBottom(albedo)`) are required:
-neither has a defensible default.
+and `bottom` are required: neither has a defensible default. The bottom
+is `BlackBottom()` (deep water), `LambertianBottom(albedo)` (one albedo,
+or one per wavelength of `λ`) or a [`TabulatedLambertianBottom`](@ref),
+which is interpolated onto `λ`.
 
 # Example
 ```julia
 water  = PureWater{Float64}()
-column = uniform_column(AbstractOceanConstituent{Float64}[water]; n_layers = 4, depth = 20.0)
-col    = column_optics(column, [450.0, 550.0]; refractive_index = FixedRefractiveIndex(1.34),
+column = uniform_column(AbstractOceanConstituent{Float64}[water];
+                        n_layers = 4, depth = 20.0)
+col    = column_optics(column, [450.0, 550.0];
+                       refractive_index = FixedRefractiveIndex(1.34),
                        bottom = BlackBottom(), polarized = true)
 ```
 """
-function column_optics(column::OceanColumn, λ_grid::AbstractVector{<:Real};
+function column_optics(::Type{FT}, column::OceanColumn, λ_grid::AbstractVector{<:Real};
                        refractive_index::AbstractRefractiveIndexModel,
                        bottom::AbstractOceanBottom,
                        ℓ_max::Integer = 64,
                        polarized::Bool = false,
-                       scalar_phase_approximation::Union{Nothing, Symbol} = nothing,
-                       FT::Type{<:AbstractFloat} = Float64)
-    cache  = Dict{Any, Any}()
-    layers = [_layer_optics(l, λ_grid, ℓ_max, polarized, scalar_phase_approximation, FT, cache)
-              for l in column]
+                       scalar_phase_approximation::Union{Nothing, Symbol} = nothing) where {FT<:Real}
+    _check_parameter_type(FT)
+    cache  = _expansion_cache(FT)
+    layers = OceanLayerOptics{FT, Vector{FT}, Vector{Int}}[
+        _layer_optics(l, λ_grid, ℓ_max, polarized, scalar_phase_approximation, FT, cache)
+        for l in column]
     λ = first(layers).λ
-    n = FT.(OceanOptics.refractive_index(refractive_index, λ))
-    return OceanColumnOptics(layers, n, bottom)
+    n = FT.(_index_on_grid(refractive_index, λ))
+    return OceanColumnOptics(layers, n, _resolve_bottom(bottom, λ, FT))
 end
+
+column_optics(column::OceanColumn{T}, λ_grid::AbstractVector{<:Real}; kwargs...) where {T} =
+    column_optics(T, column, λ_grid; kwargs...)
+
+_resolve_bottom(b::AbstractOceanBottom, λ, FT) = b
+_resolve_bottom(b::LambertianBottom, λ, FT) = LambertianBottom(FT.(b.albedo))
+function _resolve_bottom(b::TabulatedLambertianBottom, λ, FT)
+    lo, hi = first(b.λ), last(b.λ)
+    all(x -> _within(x, lo, hi), λ) ||
+        throw(DomainError(extrema(λ), "TabulatedLambertianBottom" *
+                          (isempty(b.source) ? "" : " ($(b.source))") * " covers $(lo)–$(hi) nm, " *
+                          "the column grid $(minimum(λ))–$(maximum(λ)) nm"))
+    tbl = SpectralTable(FT.(b.λ), FT.(b.albedo))
+    return LambertianBottom(FT[linterp(tbl, x) for x in λ])
+end
+
+# The keyword `refractive_index` of `column_optics` shadows the function.
+_index_on_grid(model::AbstractRefractiveIndexModel, λ) = refractive_index(model, λ)

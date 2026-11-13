@@ -42,3 +42,30 @@
     promoted = IOP(0.1, 0.05f0, 1//10)
     @test promoted.a isa Float64   # promoted to Float64 since 0.1 is Float64
 end
+
+@testset "Integer and rational element types" begin
+    # Arrays of integers or rationals become floating-point IOPs, as scalars do.
+    iop = IOP([1, 2], [3, 4], [0, 1])
+    @test iop isa IOP{Float64} && iop.a == [1.0, 2.0] && iop.bb == [0.0, 1.0]
+    @test IOP([1//2], [1//4], [0//1]) isa IOP{Float64}
+    @test IOP(1, 2, 0) isa IOP{Float64}
+    # Models and optics are not built in integer or rational arithmetic.
+    for T in (Int, Rational{Int})
+        @test_throws "floating-point type" CDOM{T}()
+        @test_throws "floating-point type" PureWater{T}()
+        @test_throws "floating-point type" Phytoplankton{T}(Chl = 1)
+        @test_throws "floating-point type" NonAlgalParticles{T}()
+        @test_throws "floating-point type" NonAlgalParticles{T, FellMineral}()
+        @test_throws "floating-point type" GordonMorel1983{T}()
+        @test_throws "floating-point type" HenyeyGreensteinPhase{T}()
+        @test_throws "floating-point type" RayleighWaterPhase{T}()
+        @test_throws "floating-point type" FournierForandPhase{T}(backscatter_fraction = 0.01)
+    end
+    layer = OceanLayer(0.0, 1.0, [PureWater(), CDOM()])
+    @test_throws "floating-point type" layer_optics(Int, layer, [500.0])
+    @test_throws "floating-point type" layer_optics(Rational{Int}, layer, [500.0])
+    col = OceanColumn([layer])
+    @test_throws "floating-point type" column_optics(Rational{Int}, col, [500.0];
+                                                     refractive_index = FixedRefractiveIndex(1.34),
+                                                     bottom = BlackBottom())
+end

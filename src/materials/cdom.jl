@@ -22,11 +22,9 @@
 """
 $(TYPEDEF)
 
-Bricaud, Morel & Prieur (1981) exponential-decay CDOM absorption,
-`a_g(λ) = a_g(λ_ref) · exp(-slope · (λ - λ_ref))`. Currently the only
-parameterization shipped; future additions (e.g. separate slopes for the
-UV and visible hinge regions) can subtype `AbstractCDOMModel` without
-altering `CDOM` itself.
+Exponential CDOM absorption of Bricaud, Morel & Prieur (1981),
+`a_g(λ) = a_g(λ_ref) · exp(−slope · (λ − λ_ref))`, with `a_g` in `1/m`, `λ` in nm and
+`slope` in `1/nm`.
 """
 struct BricaudMorelPrieur1981 <: AbstractCDOMModel end
 
@@ -66,34 +64,34 @@ end
 """
     CDOM{FT}(; model=BricaudMorelPrieur1981(), a_ref=0.03, λ_ref=440, slope=0.014)
 
-Construct a CDOM absorber. Default values reproduce the Bricaud, Morel &
-Prieur (1981) open-ocean average. `slope` outside the Babin et al. (2003)
-global survey range of 0.005–0.030 nm⁻¹ triggers a non-fatal warning.
+Construct a CDOM absorber with absorption `a_ref` `[1/m]` at `λ_ref` `[nm]` and spectral
+slope `slope` `[1/nm]`.
+
+The defaults are the open-ocean average of Bricaud, Morel & Prieur (1981). A `slope`
+outside 0.005–0.030 nm⁻¹, the range of the survey of Babin et al. (2003), logs a warning.
 """
 function CDOM{FT}(;
         model::AbstractCDOMModel = BricaudMorelPrieur1981(),
-        a_ref                    = FT(0.03),
-        λ_ref                    = FT(440),
-        slope                    = FT(0.014),
-) where {FT<:AbstractFloat}
+        a_ref                    = 0.03,
+        λ_ref                    = 440,
+        slope                    = 0.014,
+) where {FT<:Real}
+    _check_parameter_type(FT)
     a_ref ≥ zero(a_ref) ||
         throw(ArgumentError("CDOM: a_ref must be non-negative, got $a_ref"))
     λ_ref > zero(λ_ref) ||
         throw(ArgumentError("CDOM: λ_ref must be positive, got $λ_ref"))
-    (FT(0.005) ≤ slope ≤ FT(0.030)) ||
+    _within(slope, 0.005, 0.030) ||
         @warn "CDOM: slope $slope [1/nm] outside typical 0.005-0.030 range"
     return CDOM{FT, typeof(model)}(model, FT(a_ref), FT(λ_ref), FT(slope))
 end
 
-CDOM(; kwargs...) = CDOM{Float64}(; kwargs...)
+CDOM(; kwargs...) = CDOM{_parameter_type(values(kwargs))}(; kwargs...)
 
-# Absorption — analytic, branch-free, AD-transparent.
-#
-# The returned type is `promote_type(FT, typeof(λ))`: passing a plain
-# `Float64` gives `FT`; passing a `ForwardDiff.Dual` gives `Dual` so the
-# derivative w.r.t. λ is tracked through `exp`.
+# a_g(λ) = a_ref exp(−S (λ − λ_ref)). The result has the type that the
+# parameters and `λ` promote to, so dual numbers in either are carried.
 absorption(c::CDOM, λ::Real)           = c.a_ref * exp(-c.slope * (λ - c.λ_ref))
-absorption(c::CDOM, λ::AbstractVector) = [absorption(c, λi) for λi in λ]
+absorption(c::CDOM, λ::AbstractVector) = map(Base.Fix1(absorption, c), λ)
 
 function Base.show(io::IO, c::CDOM{FT, M}) where {FT, M}
     print(io, "CDOM{$FT}(", nameof(M), ", a($(c.λ_ref))=$(c.a_ref), S=$(c.slope))")

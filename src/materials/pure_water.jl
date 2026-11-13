@@ -46,26 +46,42 @@ methods dispatch on `M` to pick the right one.
 abstract type AbstractPureWaterAbsorptionModel end
 
 """
-Smith & Baker (1981), 200–800 nm, 10 nm resolution: upper bounds for the
-clearest natural waters. Below ~420 nm it is several times higher than
-modern pure-water measurements. No temperature correction is applied.
+$(TYPEDEF)
+
+Absorption of Smith & Baker (1981), 200–800 nm at 10 nm: upper bounds for the clearest
+natural waters.
+
+Below about 420 nm it is several times higher than modern pure-water measurements. No
+temperature correction is applied.
 """
 struct SmithBaker1981 <: AbstractPureWaterAbsorptionModel end
 
-"Pope & Fry (1997), 380–727.5 nm, 2.5 nm resolution, measured at 22 °C."
+"""
+$(TYPEDEF)
+
+Absorption of Pope & Fry (1997), 380–727.5 nm at 2.5 nm, measured at 22 °C.
+"""
 struct PopeFry1997 <: AbstractPureWaterAbsorptionModel end
 
-"Kou, Labrie & Chylek (1993), 667–2500 nm, ~1 nm resolution, measured at 22 °C."
+"""
+$(TYPEDEF)
+
+Absorption of Kou, Labrie & Chylek (1993), 667–2500 nm, measured at 22 °C.
+
+The bundled table has 548 points with steps of 0.3 to 18 nm.
+"""
 struct Kou1993 <: AbstractPureWaterAbsorptionModel end
 
 """
-IOCCG Protocol Series (2018) recommended pure-water absorption: Morel et al.
-(2007) for 340–415 nm, Pope & Fry (1997) for 420–725 nm and Kou et al.
-(1993) for 730–750 nm, at 5 nm resolution over 350–750 nm as used for the
-HydroLight database of Loisel et al. (2023); continued with Kou et al.
-(1993) up to 2500 nm. The composite's 730–750 nm values differ from the
-bundled Kou table by up to 0.8 % (0.06 % step at the 750 nm junction).
-The default model.
+$(TYPEDEF)
+
+Pure-water absorption recommended by the IOCCG Protocol Series (2018); the default model.
+
+It combines Morel et al. (2007) for 340–415 nm, Pope & Fry (1997) for 420–725 nm and Kou
+et al. (1993) for 730–750 nm, at 5 nm over 350–750 nm as used for the HydroLight database
+of Loisel et al. (2023), and is continued with Kou et al. (1993) up to 2500 nm. The
+composite's 730–750 nm values differ from the bundled Kou table by up to 0.8 % (0.06 %
+step at the 750 nm junction).
 """
 struct IOCCG2018 <: AbstractPureWaterAbsorptionModel end
 
@@ -76,15 +92,41 @@ struct IOCCG2018 <: AbstractPureWaterAbsorptionModel end
 """
 $(TYPEDEF)
 
-Pure-water scattering model. `ZhangHu2009` is the modern default; the
-older `Morel1974` is kept for reproducing legacy codes.
+Pure-water scattering model: [`ZhangHu2009`](@ref) (the default) or [`Morel1974`](@ref).
 """
 abstract type AbstractPureWaterScatteringModel end
 
-"Morel (1974). Salinity-independent: b_w(λ) = 0.00193 (550/λ)^4.32."
+"""
+$(TYPEDEF)
+
+Power law fitted to the seawater scattering of Morel (1974),
+
+``b_w(λ) = 0.00193\\,(550/λ)^{4.32}`` `[1/m]`, `λ` in nm.
+
+The formula represents seawater and does not depend on the `salinity`, `temperature`
+or `depolarization` of the [`PureWater`](@ref): with `salinity = 0` it still returns
+the seawater value, about 30 % above fresh water (compare [`ZhangHu2009`](@ref),
+1.958·10⁻³ m⁻¹ at 500 nm for S = 0 against 2.913·10⁻³ here). It is a smooth fit, not
+Morel's table: against the pure-sea-water values that Mobley et al. (1993, Problem 7)
+quote from Smith & Baker (1981), 0.0063 m⁻¹ at 417 nm and 0.0032 m⁻¹ at 486 nm, it
+gives 0.00638 (+1.3 %) and 0.00329 (+2.9 %); the printed values carry two digits. It
+is 7–16 % above [`ZhangHu2009`](@ref) at S = 35 over 350–750 nm.
+"""
 struct Morel1974  <: AbstractPureWaterScatteringModel end
 
-"Zhang, Hu & He (2009). Includes salinity and temperature dependence. 200–1100 nm."
+"""
+$(TYPEDEF)
+
+Scattering of seawater after Zhang, Hu & He (2009), a function of wavelength,
+temperature and salinity.
+
+The Rayleigh magnitude uses the `depolarization` of the [`PureWater`](@ref) (default
+0.039) in the Cabannes factor `(6 + 6δ)/(6 − 7δ)` and in the angular integral.
+
+No range of validity is checked: the routine returns values at any wavelength,
+temperature and salinity. The refractive index inside it is the Quan & Fry (1995) fit
+(400–700 nm, 0–30 °C, 0–35 PSU); outside those ranges the result is an extrapolation.
+"""
 struct ZhangHu2009 <: AbstractPureWaterScatteringModel end
 
 # -----------------------------------------------------------------------------
@@ -126,23 +168,26 @@ struct PureWater{FT,
     temperature::FT
     "Salinity [PSU] (Practical Salinity Unit)"
     salinity::FT
-    "Depolarization ratio for the Rayleigh-type scattering phase function"
+    "Depolarization ratio `δ` (unpolarized light, 90°) of the phase matrix and of the `ZhangHu2009` scattering magnitude"
     depolarization::FT
 end
 
 function PureWater{FT}(;
         absorption_model = IOCCG2018(),
         scattering_model = ZhangHu2009(),
-        temperature      = FT(20),
-        salinity         = FT(35),
-        depolarization   = FT(0.039),
+        temperature      = 20,
+        salinity         = 35,
+        depolarization   = _WATER_DEPOLARIZATION,
 ) where {FT}
+    _check_parameter_type(FT)
+    _within(FT(depolarization), 0, 1) && FT(depolarization) < one(FT) ||
+        throw(ArgumentError("PureWater: depolarization must be in [0, 1), got $depolarization"))
     PureWater{FT, typeof(absorption_model), typeof(scattering_model)}(
         absorption_model, scattering_model,
         FT(temperature), FT(salinity), FT(depolarization))
 end
 
-PureWater(; kwargs...) = PureWater{Float64}(; kwargs...)
+PureWater(; kwargs...) = PureWater{_parameter_type(values(kwargs))}(; kwargs...)
 
 # Phase function interface — water scatters as depolarized Rayleigh.
 scattering_phase(w::PureWater{FT}) where {FT} =
@@ -162,23 +207,25 @@ scattering_phase(w::PureWater{FT}) where {FT} =
 """
     absorption(w::PureWater, λ) -> FT
 
-Pure-water absorption coefficient [1/m] at wavelength `λ` [nm] from the
-configured `absorption_model`, linearly interpolated; throws outside the
-model's tabulated range. The temperature correction
-`a(T) = a(T_ref) + Ψ_T (T − T_ref)` uses the Röttgers et al. (2014)
-coefficients `Ψ_T` for `λ ≥ 550 nm` (up to 0.016 m⁻¹ K⁻¹ near 740 nm) and is
-applied relative to the table's measurement temperature `T_ref`. Salinity
-effects on absorption are not modelled.
+Return the pure-water absorption coefficient `[1/m]` at wavelength `λ` `[nm]`.
+
+The table of the water's `absorption_model` is interpolated linearly; a wavelength
+outside the tabulated range throws. The temperature correction
+`a(T) = a(T_ref) + Ψ_T (T − T_ref)` uses the coefficients `Ψ_T` of Röttgers et al. (2014)
+for `λ ≥ 550 nm` (up to 0.016 m⁻¹ K⁻¹ near 740 nm), relative to the measurement
+temperature `T_ref` of the table. Salinity effects on absorption are not modelled.
 """
 function absorption(w::PureWater{FT, A, S}, λ::Real) where {FT, A, S}
-    a₀    = _interpolate_pure_water_absorption(A(), λ)
+    T     = _result_type(FT, λ)
+    x     = _wide(λ)
+    a₀    = _interpolate_pure_water_absorption(A(), x)
     T_ref = _reference_temperature(A())
-    T_ref === nothing && return a₀
-    return a₀ + _temperature_coefficient(λ) * (w.temperature - FT(T_ref))
+    T_ref === nothing && return convert(T, a₀)
+    return convert(T, a₀ + _temperature_coefficient(x) * (_wide(w.temperature) - T_ref))
 end
 
 # Vectorized convenience
-absorption(w::PureWater, λ::AbstractVector) = [absorption(w, λi) for λi in λ]
+absorption(w::PureWater, λ::AbstractVector) = map(Base.Fix1(absorption, w), λ)
 
 # -----------------------------------------------------------------------------
 # Spectral reference tables
@@ -202,20 +249,27 @@ const _IOCCG_2018_TABLE       = load_spectral_csv(data_path("ioccg_2018_pure_wat
 _interpolate_pure_water_absorption(::SmithBaker1981, λ) = linterp(_SMITH_BAKER_1981_TABLE, λ)
 _interpolate_pure_water_absorption(::PopeFry1997,    λ) = linterp(_POPE_FRY_1997_TABLE,    λ)
 _interpolate_pure_water_absorption(::Kou1993,        λ) = linterp(_KOU_1993_TABLE,         λ)
-_interpolate_pure_water_absorption(::IOCCG2018, λ) =
-    λ ≤ 750 ? linterp(_IOCCG_2018_TABLE, λ) : linterp(_KOU_1993_TABLE, λ)
+function _interpolate_pure_water_absorption(::IOCCG2018, λ)
+    lo, hi = first(_IOCCG_2018_TABLE.λ), last(_KOU_1993_TABLE.λ)
+    _within(λ, lo, hi) ||
+        throw(DomainError(λ, "IOCCG2018 pure-water absorption covers $(lo)–$(hi) nm (the " *
+                             "IOCCG 2018 table up to 750 nm, Kou et al. 1993 above); choose " *
+                             "another absorption model or restrict the wavelength grid"))
+    return λ ≤ last(_IOCCG_2018_TABLE.λ) ? linterp(_IOCCG_2018_TABLE, λ) : linterp(_KOU_1993_TABLE, λ)
+end
 
 # Measurement temperature [°C] each table refers to; `nothing`: no correction.
 _reference_temperature(::SmithBaker1981) = nothing
 _reference_temperature(::PopeFry1997)    = 22.0
 _reference_temperature(::Kou1993)        = 22.0
-_reference_temperature(::IOCCG2018)      = 22.0    # Pope & Fry / Kou in 600–800 nm
+_reference_temperature(::IOCCG2018)      = _reference_temperature(Kou1993())  # Pope & Fry / Kou in 600–800 nm
 
 # Röttgers, McKee & Utschig (2014) temperature coefficient Ψ_T [1/(m K)],
-# 550–2500 nm; zero below 550 nm, where it is below the measurement
-# uncertainty (and crosses zero near 550 nm, so there is no step).
+# 550–2500 nm; zero below the first wavelength of the table (550 nm), where it is
+# below the measurement uncertainty (and crosses zero near 550 nm, so there is no step).
 const _ROTTGERS_2014_PSI_T = load_spectral_csv(data_path("rottgers_2014_temperature.csv"))
-_temperature_coefficient(λ) = λ < 550 ? zero(λ) : linterp(_ROTTGERS_2014_PSI_T, λ)
+_temperature_coefficient(λ) =
+    λ < _ROTTGERS_2014_PSI_T.lo ? zero(λ) : linterp(_ROTTGERS_2014_PSI_T, λ)
 
 # =============================================================================
 # Scattering dispatch — one method per model tag
@@ -224,18 +278,22 @@ _temperature_coefficient(λ) = λ < 550 ? zero(λ) : linterp(_ROTTGERS_2014_PSI_
 """
     scattering(w::PureWater, λ) -> FT
 
-Pure-(sea)water scattering coefficient [1/m] at wavelength `λ` [nm].
-Dispatches on the `scattering_model` tag.
+Return the scattering coefficient `[1/m]` of pure water or seawater at wavelength `λ`
+`[nm]`, from the model named by the water's `scattering_model`.
 """
-scattering(w::PureWater{FT, A, Morel1974},   λ::Real) where {FT, A} = _morel_1974_scattering(λ)
+scattering(w::PureWater{FT, A, Morel1974},   λ::Real) where {FT, A} =
+    convert(_result_type(FT, λ), _morel_1974_scattering(_wide(λ)))
 scattering(w::PureWater{FT, A, ZhangHu2009}, λ::Real) where {FT, A} =
-    _zhang_hu_2009_scattering(λ, w.temperature, w.salinity)
+    convert(_result_type(FT, λ),
+            _zhang_hu_2009_scattering(_wide(λ), _wide(w.temperature), _wide(w.salinity),
+                                      _wide(w.depolarization)))
 
-# Morel (1974) pure-water scattering, salinity-independent power law
-#   b_w(λ) = 0.00193 · (550/λ)^4.32    [1/m],  with λ in [nm]
-# Left un-annotated for AD transparency — integer/float literals promote
-# against any `Real` (including `ForwardDiff.Dual`) input.
-_morel_1974_scattering(λ) = 0.00193 * (550 / λ)^4.32
+# Morel (1974) seawater power law b_w(λ) = b_ref (λ_ref/λ)^n: b_ref [1/m], λ_ref [nm], n.
+const _MOREL_1974_B_REF    = 0.00193
+const _MOREL_1974_λ_REF    = 550
+const _MOREL_1974_EXPONENT = 4.32
+# Un-annotated so that any `Real` wavelength (including `ForwardDiff.Dual`) promotes.
+_morel_1974_scattering(λ) = _MOREL_1974_B_REF * (_MOREL_1974_λ_REF / λ)^_MOREL_1974_EXPONENT
 
 # Zhang, Hu & He (2009) seawater scattering — faithful port
 # ----------------------------------------------------------
@@ -272,8 +330,11 @@ _morel_1974_scattering(λ) = 0.00193 * (550 / λ)^4.32
 #           ion_functions/data/matlab_scripts/flort/betasw_ZHH2009.m
 # =============================================================================
 
-const _ZHH_Na  = 6.0221417930e23   # Avogadro's constant [1/mol]
-const _ZHH_Kbz = 1.3806503e-23     # Boltzmann constant  [J/K]
+# CODATA-2006 values of Avogadro's [1/mol] and Boltzmann's [J/K] constants as written in
+# betasw_ZHH2009.m, kept for bit-reproduction of that code (the SI-2019 values differ by
+# 3e-8 and 9e-7 relative).
+const _ZHH_2009_AVOGADRO = 6.0221417930e23
+const _ZHH_2009_BOLTZMANN = 1.3806503e-23
 const _ZHH_M0  = 18e-3             # Molecular weight of water [kg/mol]
 
 "Refractive index of seawater (Quan-Fry 1995 + Ciddor 1996) and `∂n_sw/∂S`."
@@ -319,39 +380,46 @@ function _zhh_dlna_dS(Tc, S)
            2 * (-2.31065e-6 - 1.37674e-9*Tc - 1.93316e-11*Tc^2) * S
 end
 
-"Proutière-Megnassan-Hucteau density derivative `ρ ∂n²/∂ρ = (n²-1)·[1 + (2/3)(n²+2)·((n²-1)/(3n))²]`."
+"""
+    _zhh_pmh(n)
+
+Return the density derivative of Proutière, Megnassan & Hucteau,
+`ρ ∂n²/∂ρ = (n²-1)·[1 + (2/3)(n²+2)·((n²-1)/(3n))²]`.
+"""
 function _zhh_pmh(n)
     n2 = n^2
     return (n2 - 1) * (1 + (2/3) * (n2 + 2) * (n/3 - 1/(3n))^2)
 end
 
 """
-    _zhang_hu_2009_scattering(λ_nm, Tc, S; δ = 0.039) -> FT
+    _zhang_hu_2009_scattering(λ_nm, Tc, S, δ)
 
-Total seawater scattering coefficient `b_sw` `[1/m]` at wavelength
-`λ_nm` `[nm]`, temperature `Tc` `[°C]` and practical salinity `S` `[PSU]`,
-with depolarization ratio `δ` (Farinato & Rowell 1976 value 0.039).
+Return the total seawater scattering coefficient `b_sw` `[1/m]` at wavelength `λ_nm`
+`[nm]`, temperature `Tc` `[°C]`, practical salinity `S` `[PSU]` and depolarization
+ratio `δ` (0.039 in Zhang, Hu & He 2009, after Farinato & Rowell 1976).
 
-Valid range: `λ ∈ [220, 1100] nm`, `T ∈ [0, 30] °C`, `S ∈ [0, 40] PSU`.
+No range of validity is checked.
 """
-function _zhang_hu_2009_scattering(λ_nm, Tc, S)
-    δ  = 0.039                              # Farinato & Rowell (1976)
+function _zhang_hu_2009_scattering(λ_nm, Tc, S, δ)
     Tk = Tc + 273.15
 
     nsw, dnds = _zhh_refractive_index(λ_nm, Tc, S)
     β_T       = _zhh_isothermal_compressibility(Tc, S)
     ρ_sw      = _zhh_density(Tc, S)
-    dlna_dS   = _zhh_dlna_dS(Tc, S)
+    # ∂ln a/∂S has a √S term whose derivative is infinite at S = 0, where it multiplies
+    # S = 0 in `flu_con`; evaluating it at `zero(S)` there gives the one-sided derivative
+    # of the product (a dual S = 0 would otherwise give 0·∞ = NaN). Same value.
+    dlna_dS   = _zhh_dlna_dS(Tc, _within(S, 0, 0) ? zero(S) : S)
     DFRI      = _zhh_pmh(nsw)
 
     λm        = λ_nm * 1e-9                 # nm → m
     cabannes  = (6 + 6δ) / (6 - 7δ)
 
     # Density-fluctuation contribution to β(90°)
-    β_df = (π^2 / 2) * λm^(-4) * _ZHH_Kbz * Tk * β_T * DFRI^2 * cabannes
+    β_df = (π^2 / 2) * λm^(-4) * _ZHH_2009_BOLTZMANN * Tk * β_T * DFRI^2 * cabannes
 
     # Concentration-fluctuation contribution to β(90°)
-    flu_con = S * _ZHH_M0 * dnds^2 / ρ_sw / (-dlna_dS) / _ZHH_Na
+    flu_con = S * _ZHH_M0 * dnds^2 / ρ_sw / (-dlna_dS) / _ZHH_2009_AVOGADRO
     β_cf    = 2 * π^2 * λm^(-4) * nsw^2 * flu_con * cabannes
 
     β_90    = β_df + β_cf
@@ -359,7 +427,7 @@ function _zhang_hu_2009_scattering(λ_nm, Tc, S)
     return (8π / 3) * β_90 * (2 + δ) / (1 + δ)
 end
 
-scattering(w::PureWater, λ::AbstractVector) = [scattering(w, λi) for λi in λ]
+scattering(w::PureWater, λ::AbstractVector) = map(Base.Fix1(scattering, w), λ)
 
 # =============================================================================
 # Backscatter fraction — Rayleigh-like, exactly 1/2 for any depolarization
@@ -369,4 +437,4 @@ scattering(w::PureWater, λ::AbstractVector) = [scattering(w, λi) for λi in λ
 # exactly 1/2 for any depolarization (the phase function is symmetric
 # forward/back), so `b_b = b/2`.
 backscattering(w::PureWater{FT}, λ::Real) where {FT} = FT(0.5) * scattering(w, λ)
-backscattering(w::PureWater, λ::AbstractVector) = [backscattering(w, λi) for λi in λ]
+backscattering(w::PureWater, λ::AbstractVector) = map(Base.Fix1(backscattering, w), λ)

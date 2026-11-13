@@ -37,7 +37,25 @@ BricaudMorelPrieur1981
 Phytoplankton
 AbstractPhytoplanktonModel
 Bricaud1998
-Gordon1992
+AbstractParticleScatteringModel
+GordonMorel1983
+```
+
+## Pigment partitions
+
+```@docs
+AbstractPigmentPartition
+ProspectPigments
+Bidigare1990Pigments
+AbstractOutOfRangeShares
+HoldEdgeShares
+UnassignedOutsideTable
+pigment_parts
+pigment_class
+pigment_fractions
+absorption_parts
+absorption_by_part
+absorption_part
 ```
 
 ## Non-algal particles

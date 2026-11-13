@@ -2,29 +2,24 @@
 # Depolarized Rayleigh phase function for pure water
 # =============================================================================
 #
-# Pure water molecules scatter light nearly — but not exactly — as Rayleigh
-# scatterers. The depolarization ratio ρ ≠ 0 accounts for anisotropic
-# polarizability.
+# Molecular scattering by water is Rayleigh scattering with a depolarization
+# ratio ρ > 0 (anisotropic polarizability); ρ is the ratio for unpolarized
+# incident light observed at 90°.
 #
-# The classical Morel (1974) value is ρ = 0.09, but more recent work
-# (Farinato & Rowell 1976, and the Zhang et al. 2009 line) gives
-# ρ ≈ 0.039 for pure seawater at 500 nm. We use ρ = 0.039 as the default;
-# the user can override.
+# Scalar phase function, normalized to (1/2) ∫₋₁¹ p dμ = 1:
 #
-# The phase function in the intensity-only (scalar) form is:
+#     p(μ) = 1 + β₂ P₂(μ),   β₂ = Δ/2,   Δ = (1 − ρ)/(1 + ρ/2),
+#     P₂(μ) = (3μ² − 1)/2
 #
-#     p(μ) = 3 / [2 (2 + σ)] · [(1 + σ) + (1 - σ) μ²]
+# which is the Cabannes form (3/(4(1+2γ))) [(1+3γ) + (1−γ) μ²] with
+# γ = ρ/(2−ρ). All other Legendre moments vanish.
 #
-# where σ = 2ρ/(1 - ρ) is the Kahn & Arking "anisotropy factor". The
-# normalization (1/2) ∫₋₁¹ p dμ = 1 is exact.
-#
-# Legendre moments are closed-form: β₀ = 1, β₂ = (1-σ)/(10·(...)),
-# all other β_ℓ = 0 for ℓ ≠ 0, 2.
-#
-# The full phase matrix also has a closed-form Greek expansion (Hansen &
-# Travis 1974), available through `greek_expansion(pf, ℓ_max;
-# polarized = true)`.
+# The phase matrix has the closed-form Greek expansion of Hansen & Travis
+# (1974), available through `greek_expansion(pf, ℓ_max; polarized = true)`.
 # =============================================================================
+
+"Depolarization ratio of pure water, Farinato & Rowell (1976), as used by Zhang, Hu & He (2009)."
+const _WATER_DEPOLARIZATION = 0.039
 
 """
 $(TYPEDEF)
@@ -34,28 +29,31 @@ Rayleigh-type phase function for pure water, with depolarization.
 # Fields
 $(TYPEDFIELDS)
 
-Default `depolarization = 0.039` follows Farinato & Rowell (1976) and is
-consistent with the Zhang, Hu & He (2009) pure-seawater model. The
-Morel (1974) older value `ρ = 0.09` can be selected explicitly:
+The phase function is `p(μ) = 1 + β₂ P₂(μ)` with `β₂ = (1 − ρ)/(2 + ρ)`, `ρ` the
+depolarization ratio for unpolarized incident light at 90°. The default `ρ = 0.039`
+follows Farinato & Rowell (1976) and is the value of the Zhang, Hu & He (2009)
+pure-seawater model. The older value `ρ = 0.09` (Morel 1974) can be selected
+explicitly:
 
 ```julia
 RayleighWaterPhase{Float64}(depolarization = 0.09)
 ```
 """
 struct RayleighWaterPhase{FT} <: AbstractOceanPhaseFunction{FT}
-    "Depolarization ratio ρ = I_⟂ / I_∥ at 90°"
+    "Depolarization ratio ρ = I_⟂ / I_∥ at 90° for unpolarized incident light"
     depolarization::FT
 
-    function RayleighWaterPhase{FT}(depolarization::FT) where {FT<:AbstractFloat}
-        (zero(FT) ≤ depolarization < FT(1)) ||
+    function RayleighWaterPhase{FT}(depolarization::FT) where {FT<:Real}
+        _check_parameter_type(FT)
+        (_within(depolarization, 0, 1) && depolarization < FT(1)) ||
             throw(ArgumentError("depolarization must be in [0, 1), got $depolarization"))
         new{FT}(depolarization)
     end
 end
 
-RayleighWaterPhase{FT}(; depolarization = FT(0.039)) where {FT<:AbstractFloat} =
-    RayleighWaterPhase{FT}(FT(depolarization))
-RayleighWaterPhase(; kwargs...) = RayleighWaterPhase{Float64}(; kwargs...)
+RayleighWaterPhase{FT}(; depolarization = _WATER_DEPOLARIZATION) where {FT<:Real} =
+    (_check_parameter_type(FT); RayleighWaterPhase{FT}(FT(depolarization)))
+RayleighWaterPhase(; kwargs...) = RayleighWaterPhase{_parameter_type(values(kwargs))}(; kwargs...)
 
 
 # -----------------------------------------------------------------------------
@@ -69,9 +67,8 @@ function phase_function_value(pf::RayleighWaterPhase{FT}, cosθ::Real) where {FT
     # De Haan convention: p(μ) = Σ β_ℓ P_ℓ(μ). For Rayleigh only β_0 = 1
     # and β_2 = ½·dpl_p are non-zero, giving
     #   p(μ) = 1 + β₂ · (3μ² − 1)/2
-    μ      = FT(cosθ)
     β₂     = FT(0.5) * _rayleigh_dpl_p(pf.depolarization)
-    return one(FT) + β₂ * (FT(3) * μ^2 - one(FT)) / FT(2)
+    return one(FT) + β₂ * (FT(3) * cosθ^2 - one(FT)) / FT(2)
 end
 
 function phase_function_moments(pf::RayleighWaterPhase{FT}, ℓ_max::Integer) where {FT}

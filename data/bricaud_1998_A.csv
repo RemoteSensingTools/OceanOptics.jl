@@ -1,23 +1,25 @@
-# Dataset:      Phytoplankton specific-absorption pre-factor A(λ) in
-#               a_φ*(λ) = A(λ) · Chl^(-E(λ))
+# Dataset:      Particulate absorption coefficient A(λ) in
+#               a_p(λ) = A(λ) · Chl^E(λ)   [1/m], Chl in mg/m³
+#               (all particles of Case-1 water: phytoplankton plus detritus;
+#               A(440) = 0.0520, E(440) = 0.6350)
 # Source:       Bricaud, Morel, Babin, Allali & Claustre (1998),
 #               "Variations of light absorption by suspended particles with
 #               chlorophyll a concentration in oceanic (case 1) waters:
 #               Analysis and implications for bio-optical models,"
 #               JGR 103, 31033-31044. doi:10.1029/98JC02712
+#               as tabulated for HydroLight's Case-1 model (AEmidUVabs.txt),
+#               whose header reads "particle absorption (phytoplankton plus
+#               detritus) ... ap(wave) = A(wave)*[chl]^E(wave)".
 # UV extension: Morrison & Nelson (2004), Limnol. Oceanogr. 49, 215-224;
 #               Vasilkov et al. (2005), Appl. Opt. 44, 2863-2869.
 # Retrieved:    https://www.oceanopticsbook.info/packages/iws_l2h/conversion/files/AEmidUVabs.txt
 #               (Ocean Optics Web Book; HydroLight-EcoLight v5 companion
 #               file, C. D. Mobley, accessed 2026-04-21)
 # License:      Creative Commons Attribution (Ocean Optics Web Book site-wide).
-# Note:         This is the 1998 Bricaud update (+ UV extensions), not the
-#               original 1995 JGR 100, 13321 table. For most applications
-#               the 1998 values are the community-standard replacement.
 # Range:        300–1000 nm, 2 nm resolution.
-# Units:        lambda_nm [nm], A_m2_per_mg [m²/mg].
-# Columns:      lambda_nm, A_m2_per_mg
-lambda_nm,A_m2_per_mg
+# Units:        lambda_nm [nm], A_per_m [1/m, for Chl in mg/m³].
+# Columns:      lambda_nm, A_per_m
+lambda_nm,A_per_m
 300.0,0.0736
 302.0,0.0747
 304.0,0.0755

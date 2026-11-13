@@ -3,6 +3,7 @@
 /docs/build/
 /docs/site/
 /docs/Manifest.toml
+/test/gpu/Manifest.toml
 
 # Coverage
 *.cov
@@ -16,7 +17,3 @@
 *.swp
 *.swo
 .DS_Store
-
-# Google Drive sync artefacts (this working copy lives under Drive)
-.tmp.drivedownload/
-*.icloud

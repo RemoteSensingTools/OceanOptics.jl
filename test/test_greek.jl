@@ -117,4 +117,17 @@
         @test greek_expansion(rw, 2, 650.0; polarized = true).γ[3] <
               greek_expansion(rw, 2, 450.0; polarized = true).γ[3]
     end
+
+    @testset "hash agrees with ==" begin
+        g1 = GreekCoefficients([1.0, 0.3, 0.1])
+        g2 = GreekCoefficients([1.0, 0.3, 0.1])
+        g3 = GreekCoefficients([1.0, 0.3, 0.2])
+        @test g1 == g2 && g1 !== g2 && hash(g1) == hash(g2)
+        @test length(unique([g1, g2, g3])) == 2
+        @test Dict(g1 => 1)[g2] == 1
+        # `==` compares values across element types, and so does `hash`.
+        h = GreekCoefficients(Float32[1, 0.5, 0.25])
+        @test h == GreekCoefficients([1.0, 0.5, 0.25]) && hash(h) == hash(GreekCoefficients([1.0, 0.5, 0.25]))
+        @test phase_id(h) != phase_id(GreekCoefficients([1.0, 0.5, 0.25]))
+    end
 end

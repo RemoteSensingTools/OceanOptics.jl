@@ -2,8 +2,8 @@
 
 A realistic Case-1 water workflow: build the biogeochemistry, compute
 inherent optical properties over the visible, inspect the inelastic
-source kernels, and differentiate the elastic-path output w.r.t. the
-chlorophyll concentration.
+source kernels, and differentiate the absorption coefficient with
+respect to wavelength.
 
 All code blocks below are executed at documentation-build time by
 Documenter's `@example` machinery, so the numerical outputs in the
@@ -45,15 +45,16 @@ b_phyto = scattering(phyto, λ)
 
 Stack the three constituents in a 5-m surface layer and compute its
 optical properties at 10-nm resolution across the visible. The result
-holds the absorption optical depth and one scattering component per
-scattering constituent (here water and phytoplankton; CDOM only absorbs):
+holds one absorption component per absorber and one scattering component
+per scattering constituent (here water and phytoplankton; CDOM only
+absorbs):
 
 ```@example ex
 layer = OceanLayer(0.0, 5.0,
                    AbstractOceanConstituent{Float64}[water, cdom, phyto])
 λ_grid = collect(400.0:10.0:700.0)
 opt    = layer_optics(layer, λ_grid; ℓ_max = 32)
-[(c.label, c.polarization) for c in opt.components]
+[(c.label, c.part) for c in opt.absorbers], [(c.label, c.polarization) for c in opt.scatterers]
 ```
 
 Mixed quantities are derived from the components:
@@ -101,37 +102,67 @@ col = column_optics(column, [450.0, 550.0, 650.0];
 (n_layers(col), col.refractive_index)
 ```
 
-## Inelastic kernels
+## Chlorophyll absorption and fluorescence
 
-Chlorophyll-a fluorescence is built from the phytoplankton absorber
-plus a Gaussian emission band at 685 nm. The package returns kernels
-a downstream two-pass RT solver convolves against the pass-1
-irradiance; we do not solve RT here.
-
-```@example ex
-sif = chlorophyll_fluorescence(phyto)
-sif
-```
+To follow the light absorbed by chlorophyll, give the phytoplankton a
+pigment partition. [`ProspectPigments`](@ref) splits its absorption into
+chlorophyll and carotenoids with the leaf spectra of PROSPECT-D (the land
+analogy); [`Bidigare1990Pigments`](@ref) uses ocean pigment groups. The
+total absorption is unchanged:
 
 ```@example ex
-excitation_absorption(sif, 440.0)           # φ · a_φ(440): photons, yield included
+pig = Phytoplankton(Chl = 0.5, pigments = ProspectPigments(carotenoid_ratio = 0.3))
+a = absorption_by_part(pig, 490.0)
+(absorption_parts(pig), a, sum(a) ≈ absorption(pig, 490.0))
 ```
 
-[`radiance_source_kernel`](@ref) adds the photon-energy ratio `λ'/λ`
-needed for an energy (radiance) source:
+Fluorescence is excited by chlorophyll absorption and by the share `η`
+of carotenoid absorption passed to chlorophyll (`0`: chlorophyll only;
+`1`: lossless antenna). The default emission is the chloroplast-level
+spectrum of the leaf model Fluspect; the quantum yield is always given:
 
 ```@example ex
-radiance_source_kernel(sif, 440.0, 685.0) / inelastic_coefficient(sif, 440.0, 685.0)
+chl_only = chlorophyll_fluorescence(pig; quantum_yield = 0.02, carotenoid_transfer = 0.0)
+antenna  = chlorophyll_fluorescence(pig; quantum_yield = 0.02, carotenoid_transfer = 0.5)
+excitation_absorption(chl_only, 490.0), excitation_absorption(antenna, 490.0)
 ```
 
-The emission density peaks at 685 nm with FWHM ≈ 25 nm:
+The emission density (photons per nm) has its maxima at 685 and 739 nm:
 
 ```@example ex
 using Printf
-println(" λ [nm]    f(440, λ) [1/nm]")
-for λ in (640.0, 670.0, 680.0, 685.0, 690.0, 700.0, 730.0)
-    @printf("%6.1f    %.5f\n", λ, emission(sif, 440.0, λ))
+println(" λ [nm]    f(λ) [1/nm]")
+for λ in (660.0, 685.0, 700.0, 720.0, 739.0, 760.0, 800.0)
+    @printf("%6.1f    %.5f\n", λ, emission(antenna, 440.0, λ))
 end
+```
+
+Fluorescence converts photons ([`conversion_units`](@ref)), so the energy kernel
+[`radiance_source_kernel`](@ref) is the photon kernel times the photon-energy ratio
+`λ'/λ`:
+
+```@example ex
+radiance_source_kernel(antenna, 440.0, 685.0) / inelastic_coefficient(antenna, 440.0, 685.0)
+```
+
+In a layer, the process is linked to the absorption components that
+excite it, and the light each component absorbs follows from the
+solver's layer-mean scalar irradiance. Here a uniform 1 W m⁻² nm⁻¹ stands
+in for the solver's field:
+
+```@example ex
+lay = layer_optics(OceanLayer(0.0, 5.0, AbstractOceanConstituent{Float64}[water, pig];
+                              inelastic = AbstractOceanInelasticProcess{Float64}[antenna]),
+                   collect(400.0:5.0:750.0))
+E₀  = ones(n_wavelengths(lay))
+par = absorbed_par(lay, E₀)                  # µmol photons m⁻² s⁻¹ per absorption component
+[(c.label, c.part, round(p; sigdigits = 4)) for (c, p) in zip(lay.absorbers, par)]
+```
+
+```@example ex
+λ_em = collect(640.0:1.0:850.0)
+P    = inelastic_emission(lay, 1, E₀, λ_em)  # W m⁻² nm⁻¹ emitted by the layer
+λ_em[argmax(P)], maximum(P)
 ```
 
 Water Raman at 440-nm excitation peaks around 517 nm (the `3400 cm⁻¹`
@@ -144,12 +175,24 @@ ram = WaterRaman{Float64}()
  emission(ram, 440.0, 517.0))
 ```
 
+The Raman coefficient is an energy conversion coefficient (Mobley et al. 1993): the
+energy kernel is `b_R f_R` without a photon-energy ratio, and the angular distribution
+is the Rayleigh-type phase function for the depolarization ratio of the band:
+
+```@example ex
+(conversion_units(ram),
+ radiance_source_kernel(ram, 440.0, 517.0) / (excitation_absorption(ram, 440.0) * emission(ram, 440.0, 517.0)),
+ phase_function_moments(raman_phase(ram), 2))
+```
+
 ## Forward-mode automatic differentiation
 
-Every forward function along the elastic path is AD-transparent via
-`ForwardDiff.Dual` inputs on the *wavelength* and most model
-parameters. Spectral sensitivity of the total absorption coefficient
-at 440 nm:
+The scalar functions `absorption`, `scattering` and `backscattering`
+accept a `ForwardDiff.Dual` *wavelength*; `phase_function_value` of the
+Fournier-Forand and Henyey-Greenstein phase functions accepts a dual `μ`;
+and `absorbed_power`, `absorbed_photons` and `absorbed_par` accept a dual
+irradiance. Spectral sensitivity of the total absorption coefficient at
+440 nm:
 
 ```@example ex
 using ForwardDiff
@@ -159,16 +202,61 @@ using ForwardDiff
 )
 ```
 
-Struct parameters themselves are typed `FT<:AbstractFloat`, so
-differentiating with respect to e.g. the CDOM slope goes through the
-analytic formula rather than the struct:
+Model parameters carry dual numbers too. The element type of a
+constituent is any `Real`; a constructor without an explicit type takes
+it from its parameters. The derivative of the CDOM absorption with
+respect to its spectral slope, against the closed form
+`∂a/∂S = −(λ − λ_ref) a`:
 
 ```@example ex
-a_ref, λ_ref = 0.03, 440.0
-g(S) = sum(a_ref * exp(-S * (λ - λ_ref)) for λ in (500.0, 600.0, 700.0))
-ForwardDiff.derivative(g, 0.014)
+(ForwardDiff.derivative(S -> absorption(CDOM(slope = S), 500.0), 0.014),
+ -(500.0 - 440.0) * absorption(CDOM(slope = 0.014), 500.0))
 ```
 
-See `test/test_ad.jl` for a wider set of worked AD examples, including
-CDOM, Pure Water, Morel / Zhang-Hu, Fournier-Forand and
-Henyey-Greenstein sensitivities.
+`layer_optics` and `column_optics` accept layers of dual element type and
+return optical depths that carry the derivative. Here the derivative of
+the absorption optical depth of a 5 m layer with respect to chlorophyll;
+every constituent of the layer is built at the element type of `Chl`:
+
+```@example ex
+λ_ad = [443.0, 551.0, 670.0]
+function absorption_depth(Chl)
+    FT    = typeof(Chl)
+    layer = OceanLayer(0.0, 5.0, AbstractOceanConstituent{FT}[
+                PureWater{FT}(), CDOM{FT}(), Phytoplankton{FT}(Chl = Chl)])
+    return absorption_optical_depth(layer_optics(layer, λ_ad; ℓ_max = 16))
+end
+∂τ_∂Chl = ForwardDiff.derivative(absorption_depth, 0.5)
+```
+
+A central difference gives the same numbers, and the logarithmic
+derivative of the phytoplankton part is the Bricaud exponent `E(λ) < 1`:
+the absorption is not linear in chlorophyll.
+
+```@example ex
+h = 1e-6
+(∂τ_∂Chl, (absorption_depth(0.5 + h) .- absorption_depth(0.5 - h)) ./ 2h)
+```
+
+The backscatter fraction of a Fournier-Forand phase function is carried
+through the Legendre expansion as well (the inversion to `(n, μ_j)` is
+linearized at its root, and the quadrature runs in dual numbers):
+
+```@example ex
+ForwardDiff.derivative(
+    B -> phase_function_moments(FournierForandPhase(backscatter_fraction = B), 4), 0.018)
+```
+
+Not differentiable with respect to parameters: the inelastic processes
+(`WaterRaman`, fluorescence) and their emission spectra, which are
+floating point only (their kernels accept dual wavelengths), and the
+measured phase tables (`PetzoldPhase`, `TabulatedMuellerPhase`). A
+constituent of fixed floating-point type cannot store a dual parameter:
+`CDOM{Float64}(slope = S)` with a dual `S` is a `MethodError`. The
+[consumer interface](consumer_api.md) lists every differentiable
+parameter.
+
+`test/test_ad.jl` holds the tested cases: each parameter derivative
+against a central difference or a closed form, for the scalar functions
+and through `layer_optics` and `column_optics`; wavelength,
+scattering-angle and irradiance derivatives; and the rejected cases.

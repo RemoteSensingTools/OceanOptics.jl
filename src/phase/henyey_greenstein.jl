@@ -35,16 +35,17 @@ struct HenyeyGreensteinPhase{FT} <: AbstractOceanPhaseFunction{FT}
     "Asymmetry parameter `g = ⟨μ⟩ = β₁`, must satisfy `|g| < 1`"
     g::FT
 
-    function HenyeyGreensteinPhase{FT}(g::FT) where {FT<:AbstractFloat}
+    function HenyeyGreensteinPhase{FT}(g::FT) where {FT<:Real}
+        _check_parameter_type(FT)
         abs(g) < one(FT) ||
             throw(ArgumentError("HenyeyGreenstein: |g| must be strictly less than 1, got g=$g"))
         new{FT}(g)
     end
 end
 
-HenyeyGreensteinPhase{FT}(; g = FT(0.85)) where {FT<:AbstractFloat} =
-    HenyeyGreensteinPhase{FT}(FT(g))
-HenyeyGreensteinPhase(; kwargs...) = HenyeyGreensteinPhase{Float64}(; kwargs...)
+HenyeyGreensteinPhase{FT}(; g = 0.85) where {FT<:Real} =
+    (_check_parameter_type(FT); HenyeyGreensteinPhase{FT}(FT(g)))
+HenyeyGreensteinPhase(; kwargs...) = HenyeyGreensteinPhase{_parameter_type(values(kwargs))}(; kwargs...)
 
 # -----------------------------------------------------------------------------
 # Phase function value and moments
@@ -79,14 +80,13 @@ asymmetry_parameter(pf::HenyeyGreensteinPhase) = pf.g
 """
     backscatter_fraction(pf::HenyeyGreensteinPhase) -> FT
 
-Closed form derived from direct integration of `(1/2) ∫₋₁⁰ p(μ) dμ` with
-substitution `u = 1 + g² - 2gμ`:
+Return the backscatter fraction `(1/2) ∫₋₁⁰ p(μ) dμ` in closed form:
 
 ```
 B(g) = (1-g²)/(2g) · [ 1/√(1+g²) - 1/(1+g) ]
 ```
 
-At `g = 0` the expression is 0/0; we short-circuit to `B = 1/2` (isotropic).
+At `g = 0` the expression is 0/0 and the isotropic value `B = 1/2` is returned.
 """
 function backscatter_fraction(pf::HenyeyGreensteinPhase{FT}) where {FT}
     g = pf.g

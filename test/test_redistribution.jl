@@ -27,10 +27,9 @@ using QuadGK
         @test_throws ArgumentError GaussianEmission{Float64}(center_nm = -1.0,  σ_nm = 1.0)
     end
 
-    @testset "WavenumberShiftEmission: Raman peak at 440 nm → ≈ 491 nm" begin
-        # 3400 cm⁻¹ Stokes shift moves ν' = 10⁷/440 ≈ 22727 cm⁻¹ to ν ≈ 19327 cm⁻¹,
-        # which is λ ≈ 517 nm. Wait — redo: shift for water Raman is 3400 cm⁻¹;
-        # at λ'=440 we expect emission peak λ = 10⁷/(22727 - 3400) = 10⁷/19327 ≈ 517.4 nm.
+    @testset "WavenumberShiftEmission: Raman peak at 440 nm → 517.4 nm" begin
+        # The 3400 cm⁻¹ Stokes shift moves ν' = 10⁷/440 ≈ 22727 cm⁻¹ to ν ≈ 19327 cm⁻¹,
+        # so the emission peaks at λ = 10⁷/19327 ≈ 517.4 nm.
         r = WavenumberShiftEmission{Float64}(shift_cm_inv = 3400.0, σ_cm_inv = 85.0)
 
         λ_prime = 440.0
@@ -56,6 +55,27 @@ using QuadGK
 
     @testset "WavenumberShiftEmission constructor validation" begin
         @test_throws ArgumentError WavenumberShiftEmission{Float64}(shift_cm_inv = 3400.0, σ_cm_inv = 0.0)
+    end
+
+    @testset "TabulatedEmission" begin
+        λ = [600.0, 650.0, 700.0, 750.0]
+        r = TabulatedEmission(λ, [0.0, 2.0, 1.0, 0.0]; source = "test")
+        # Normalized to unit area; linear between points, zero outside.
+        @test r.density ≈ [0.0, 2.0, 1.0, 0.0] ./ 150
+        @test redistribution(r, 400.0, 675.0) ≈ 1.5 / 150
+        @test redistribution(r, 400.0, 599.0) == 0 && redistribution(r, 400.0, 751.0) == 0
+        @test redistribution(r, 400.0, 650.0) == redistribution(r, 500.0, 650.0)   # excitation-independent
+        x = 590.0:0.01:760.0
+        @test sum(redistribution(r, 0.0, xi) for xi in x) * step(x) ≈ 1 rtol = 1e-9
+        # Energy spectra become photon densities ∝ E·λ.
+        re = TabulatedEmission(λ, [0.0, 2.0, 1.0, 0.0]; units = :energy)
+        @test re.density[3] / re.density[2] ≈ (1.0 * 700) / (2.0 * 650)
+        @test ForwardDiff.derivative(x -> redistribution(r, 0.0, x), 625.0) ≈ (2 / 150) / 50
+        @test_throws ArgumentError TabulatedEmission(λ, [0.0, -1.0, 1.0, 0.0])
+        @test_throws ArgumentError TabulatedEmission(λ, zeros(4))
+        @test_throws ArgumentError TabulatedEmission([600.0, 600.0], [1.0, 1.0])
+        @test_throws DimensionMismatch TabulatedEmission(λ, [1.0, 1.0])
+        @test_throws ArgumentError TabulatedEmission(λ, ones(4); units = :watts)
     end
 
     @testset "Forward-mode AD through redistribution" begin

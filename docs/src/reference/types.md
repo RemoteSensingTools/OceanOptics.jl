@@ -43,15 +43,22 @@ fell_column
 
 ## Solver output
 
+The numeric arrays of these structs are type parameters, and
+`Adapt.adapt(to, x)` moves them to a device; see "Precision and devices"
+in the [Consumer API](../consumer_api.md).
+
 ```@docs
 layer_optics
 column_optics
 OceanLayerOptics
+AbsorptionComponent
 ScatteringComponent
+InelasticComponent
 OceanColumnOptics
 AbstractOceanBottom
 BlackBottom
 LambertianBottom
+TabulatedLambertianBottom
 bottom_albedo
 interface_depths
 wavelengths

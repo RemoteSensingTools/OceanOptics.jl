@@ -44,12 +44,12 @@ New phase functions implement `phase_function_value` (or override
 `phase_function_moments`); phase matrices also implement
 `is_polarizable(pf) = true` and `_polarized_greek(pf, ℓ_max)`.
 """
-abstract type AbstractOceanPhaseFunction{FT<:AbstractFloat} end
+abstract type AbstractOceanPhaseFunction{FT<:Real} end
 
 """
     phase_function_value(pf, μ) -> FT
 
-Phase function `p(μ)` at scattering cosine `μ`, normalized as
+Return the phase function `p(μ)` at scattering cosine `μ`, normalized as
 `(1/2) ∫₋₁¹ p dμ = 1`.
 """
 function phase_function_value end
@@ -81,7 +81,7 @@ _normalization_tolerance(::Type{FT}) where {FT} = max(1e-8, 8 * eps(FT))
 """
     phase_function_moments(pf, ℓ_max[, λ]) -> Vector{FT}
 
-Legendre expansion coefficients `β_ℓ`, `ℓ = 0:ℓ_max` (index 1 is `ℓ = 0`),
+Return the Legendre expansion coefficients `β_ℓ`, `ℓ = 0:ℓ_max` (index 1 is `ℓ = 0`),
 with `p(μ) = Σ_ℓ β_ℓ P_ℓ(μ)` and `β₀ = 1`.
 
 The default evaluates `β_ℓ = (2ℓ+1)/2 ∫₀^π p(θ) P_ℓ(cos θ) sin θ dθ` by
@@ -113,11 +113,12 @@ phase_function_moments(pf::AbstractOceanPhaseFunction, ℓ_max::Integer, λ::Rea
 """
     greek_expansion(pf, ℓ_max[, λ]; polarized = false) -> GreekCoefficients
 
-Expansion of `pf` up to `ℓ_max`. With `polarized = false` this is the
-phase function only (`β`); with `polarized = true` it is the full phase
-matrix, available only when [`is_polarizable`](@ref)`(pf)`. For
-scalar-only phase functions the completely depolarizing approximation is
-available explicitly through [`depolarizing_greek_expansion`](@ref).
+Return the expansion of `pf` up to order `ℓ_max`.
+
+With `polarized = false` this is the phase function only (`β`); with `polarized = true`
+it is the full phase matrix, available only when [`is_polarizable`](@ref)`(pf)`. For
+scalar-only phase functions the completely depolarizing approximation is available
+explicitly through [`depolarizing_greek_expansion`](@ref).
 """
 function greek_expansion(pf::AbstractOceanPhaseFunction, ℓ_max::Integer;
                             polarized::Bool = false)
@@ -134,10 +135,11 @@ end
 """
     depolarizing_greek_expansion(pf, ℓ_max[, λ]) -> GreekCoefficients
 
-The phase function of `pf` with the *completely depolarizing* phase matrix
-`diag(p(Θ), 0, 0, 0)` (see [`depolarized`](@ref)) — an explicit
-approximation for scatterers whose phase matrix is unknown, not their
-actual polarization behavior.
+Return the expansion of `pf` with the *completely depolarizing* phase matrix
+`diag(p(Θ), 0, 0, 0)` (see [`depolarized`](@ref)).
+
+This is an explicit approximation for scatterers whose phase matrix is unknown, not
+their actual polarization behavior.
 """
 depolarizing_greek_expansion(pf::AbstractOceanPhaseFunction, ℓ_max::Integer) =
     depolarized(greek_expansion(pf, ℓ_max))
@@ -157,7 +159,8 @@ _scalar_only_error(pf::AbstractOceanPhaseFunction) =
 """
     backscatter_fraction(pf[, λ]) -> FT
 
-Fraction of scattering into the back hemisphere, `B = (1/2)∫₋₁⁰ p(μ) dμ`.
+Return the fraction of scattering into the back hemisphere, `B = (1/2)∫₋₁⁰ p(μ) dμ`.
+
 The default integrates `p` numerically; closed forms override it.
 """
 function backscatter_fraction(pf::AbstractOceanPhaseFunction{FT}) where {FT}
@@ -175,7 +178,7 @@ backscatter_fraction(pf::AbstractOceanPhaseFunction, λ::Real) = backscatter_fra
 """
     asymmetry_parameter(pf[, λ]) -> FT
 
-Mean cosine of the scattering angle, `g = ⟨μ⟩ = β₁ / 3`.
+Return the mean cosine of the scattering angle, `g = ⟨μ⟩ = β₁ / 3`.
 """
 asymmetry_parameter(pf::AbstractOceanPhaseFunction{FT}) where {FT} =
     phase_function_moments(pf, 1)[2] / FT(3)
@@ -185,7 +188,7 @@ asymmetry_parameter(pf::AbstractOceanPhaseFunction, λ::Real) = asymmetry_parame
 """
     is_polarizable(pf) -> Bool
 
-Whether `pf` provides a full phase matrix, so that
+Return whether `pf` provides a full phase matrix, so that
 `greek_expansion(pf, ℓ_max; polarized = true)` is defined.
 """
 is_polarizable(::AbstractOceanPhaseFunction) = false
@@ -193,8 +196,9 @@ is_polarizable(::AbstractOceanPhaseFunction) = false
 """
     is_wavelength_dependent(pf) -> Bool
 
-Whether `pf` differs between wavelengths; such phase functions must be
-queried with an explicit wavelength. Default `false`.
+Return whether `pf` differs between wavelengths (`false` unless a type says otherwise).
+
+A wavelength-dependent phase function must be queried with an explicit wavelength.
 """
 is_wavelength_dependent(::AbstractOceanPhaseFunction) = false
 
@@ -209,13 +213,13 @@ _requires_wavelength(pf) = is_wavelength_dependent(pf) &&
 """
     _reconstruct_from_moments(β, μ) -> FT
 
-`p(μ) = Σₗ βₗ Pₗ(μ)` by the three-term Legendre recurrence.
+Return `p(μ) = Σₗ βₗ Pₗ(μ)` by the three-term Legendre recurrence.
 """
 function _reconstruct_from_moments(β::AbstractVector{FT}, μ::Real) where {FT}
-    x = FT(μ)
-    p = β[1]
+    x = float(μ)
+    p = β[1] * one(x)
     length(β) == 1 && return p
-    P_prev, P = one(FT), x
+    P_prev, P = one(x), x
     p += β[2] * P
     for ℓ in 2:length(β)-1
         P_prev, P = P, ((2ℓ - 1) * x * P - (ℓ - 1) * P_prev) / ℓ

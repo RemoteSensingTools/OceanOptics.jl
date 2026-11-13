@@ -9,6 +9,14 @@
     @test refractive_index(qs, 400.0) > refractive_index(qs, 700.0)
     @test refractive_index(qs, [450.0, 550.0]) == [refractive_index(qs, 450.0), refractive_index(qs, 550.0)]
 
+    # Quan & Fry (1995), Eq. 4, evaluated term by term with the published
+    # coefficients at a point where every term contributes (10 °C, 30 PSU, 450 nm).
+    T, S, λ = 10.0, 30.0, 450.0
+    n_ref = 1.31405 + (1.779e-4 - 1.05e-6 * T + 1.6e-8 * T^2) * S - 2.02e-6 * T^2 +
+            (15.868 + 0.01155 * S - 0.00423 * T) / λ - 4382 / λ^2 + 1.1455e6 / λ^3
+    @test refractive_index(QuanFry1995(temperature = T, salinity = S), λ) ≈ n_ref rtol = 1e-14
+    @test n_ref ≈ 1.3458 atol = 1e-4
+
     # Fitted domain only, unless extrapolation is chosen explicitly.
     @test_throws DomainError refractive_index(qs, 350.0)
     @test_throws DomainError refractive_index(qs, 865.0)

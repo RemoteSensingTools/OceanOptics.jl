@@ -1,13 +1,12 @@
 """
 $(TYPEDEF)
 
-Bundle of inherent optical properties at one wavelength (or one wavelength
-grid). This is the neutral currency of the package: every constituent
-produces an `IOP`, constituents mix via `+`, and layers reduce to a single
-`IOP` before being expanded into an [`OceanLayerOptics`](@ref).
+Absorption, scattering and backscattering coefficients `[1/m]` at one wavelength (number
+fields) or on a wavelength grid (array fields).
 
-An `IOP` is **wavelength-local**: the scalar-field version describes one λ;
-the vector-field version describes a λ grid. Same struct, parametric fields.
+`IOP`s of constituents in one volume add with `+` and scale with `*`. The type is a
+standalone value: [`layer_optics`](@ref) does not use it and reports optical depths per
+component in an [`OceanLayerOptics`](@ref).
 
 # Fields
 $(TYPEDFIELDS)
@@ -17,10 +16,10 @@ $(TYPEDFIELDS)
 ```julia
 iop1 = IOP(0.1, 0.05, 0.018)       # pure water at 550 nm
 iop2 = IOP(0.03, 0.30, 0.012)      # phytoplankton contribution
-total = iop1 + iop2                # correctly energy-weights backscatter
+total = iop1 + iop2                # a, b and bb add; B = bb/b is scattering-weighted
 ```
 """
-struct IOP{FT<:AbstractFloat, A<:Union{FT, AbstractArray{FT}}}
+struct IOP{FT<:Real, A<:Union{FT, AbstractArray{FT}}}
     "Absorption coefficient `a(λ)` `[1/m]`"
     a::A
     "Scattering coefficient `b(λ)` `[1/m]`"
@@ -31,17 +30,27 @@ end
 
 # Lightweight constructors ----------------------------------------------------
 
-"Scalar IOP for one wavelength."
-IOP(a::FT, b::FT, bb::FT) where {FT<:AbstractFloat} = IOP{FT, FT}(a, b, bb)
+"""
+    IOP(a, b, bb)
 
-"Per-wavelength-grid IOP backed by identically-typed vectors/matrices."
-IOP(a::A, b::A, bb::A) where {FT<:AbstractFloat, A<:AbstractArray{FT}} =
+Construct an `IOP` from absorption `a`, scattering `b` and backscattering `bb` `[1/m]`.
+
+Three numbers describe one wavelength and are promoted to a common floating-point type (dual numbers are kept); three
+arrays of one type describe a wavelength grid.
+"""
+function IOP(a::FT, b::FT, bb::FT) where {FT<:Real}
+    T = float(FT)
+    return IOP{T, T}(T(a), T(b), T(bb))
+end
+
+IOP(a::A, b::A, bb::A) where {FT<:Real, A<:AbstractArray{FT}} =
     IOP{FT, A}(a, b, bb)
+# Integer and rational arrays are converted to floating point, as the scalar method does.
+IOP(a::A, b::A, bb::A) where {FT<:Union{Integer, Rational}, A<:AbstractArray{FT}} =
+    IOP(float.(a), float.(b), float.(bb))
 
-"Mixed-type convenience: promote to a common `AbstractFloat`."
 function IOP(a::Real, b::Real, bb::Real)
-    FT = promote_type(typeof(a), typeof(b), typeof(bb))
-    FT <: AbstractFloat || (FT = float(FT))
+    FT = float(promote_type(typeof(a), typeof(b), typeof(bb)))
     return IOP(FT(a), FT(b), FT(bb))
 end
 
@@ -53,17 +62,29 @@ IOP_scatterer(b, B) = IOP(zero(b), b, b * B)
 
 # Accessors -------------------------------------------------------------------
 
-"Beam attenuation `c = a + b`."
+"""
+    attenuation(iop::IOP)
+
+Return the beam attenuation `c = a + b` `[1/m]`.
+"""
 attenuation(iop::IOP) = iop.a .+ iop.b
 
-"Single-scattering albedo `ϖ = b / (a + b)`; zero when `a = b = 0`."
+"""
+    single_scattering_albedo(iop::IOP)
+
+Return the single-scattering albedo `ϖ = b / (a + b)`, zero when `a = b = 0`.
+"""
 function single_scattering_albedo(iop::IOP{FT}) where {FT}
     c = attenuation(iop)
     # Broadcast-safe form; works for scalar or array IOPs.
     return @. ifelse(c > zero(FT), iop.b / c, zero(FT))
 end
 
-"Backscatter fraction `B = b_b / b`; zero when `b = 0`."
+"""
+    backscatter_fraction(iop::IOP)
+
+Return the backscatter fraction `B = b_b / b`, zero when `b = 0`.
+"""
 function backscatter_fraction(iop::IOP{FT}) where {FT}
     return @. ifelse(iop.b > zero(FT), iop.bb / iop.b, zero(FT))
 end
@@ -80,7 +101,11 @@ end
 Base.:+(x::IOP, y::IOP) = IOP(x.a .+ y.a, x.b .+ y.b, x.bb .+ y.bb)
 Base.zero(iop::IOP) = IOP(zero(iop.a), zero(iop.b), zero(iop.bb))
 
-"Multiply all IOPs by a scalar (e.g. to scale by layer thickness)."
+"""
+    *(s::Real, iop::IOP)
+
+Multiply the three coefficients of `iop` by the number `s`.
+"""
 Base.:*(s::Real, iop::IOP) = IOP(s .* iop.a, s .* iop.b, s .* iop.bb)
 Base.:*(iop::IOP, s::Real) = s * iop
 
