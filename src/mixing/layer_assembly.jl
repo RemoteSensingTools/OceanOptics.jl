@@ -3,11 +3,13 @@
 # =============================================================================
 #
 # For one layer and wavelength grid:
-#   1. absorption optical depth τ_abs = Σ_c a_c Δz over all constituents
-#      (with the total-absorption exclusivity rule);
+#   1. one AbsorptionComponent per absorber and absorption part:
+#      τ = a_part Δz (with the total-absorption exclusivity rule);
 #   2. one ScatteringComponent per scattering constituent: τ_c = b_c Δz, the
 #      phase function's expansion (once, or per wavelength if it depends on
-#      wavelength), its backscatter fraction and a polarization label.
+#      wavelength), its backscatter fraction and a polarization label;
+#   3. one InelasticComponent per inelastic process, linked to the
+#      absorption components of its excitation pathways.
 # =============================================================================
 
 """
@@ -32,18 +34,24 @@ Optical properties of one [`OceanLayer`](@ref) at wavelengths `λ` `[nm]`
 - `FT` — floating-point type of the result.
 
 # Result
-An [`OceanLayerOptics`](@ref) with the absorption optical depth and one
-[`ScatteringComponent`](@ref) per scattering constituent, in constituent
-order. Mixed quantities follow from [`optical_depth`](@ref),
-[`single_scattering_albedo`](@ref) and
+An [`OceanLayerOptics`](@ref) with, in constituent order,
+- one [`AbsorptionComponent`](@ref) per absorbing constituent and
+  absorption part (see [`absorption_parts`](@ref): one part, `:total`,
+  unless e.g. phytoplankton carries a pigment partition);
+- one [`ScatteringComponent`](@ref) per scattering constituent;
+- one [`InelasticComponent`](@ref) per process in `layer.inelastic`, with
+  the indices of the absorption components that excite it.
+Mixed quantities follow from [`absorption_optical_depth`](@ref),
+[`optical_depth`](@ref), [`single_scattering_albedo`](@ref) and
 [`greek_expansion`](@ref)`(o, iλ)`.
 
 If a constituent declares [`is_total_absorption`](@ref) (a
 `TabulatedAbsorber` with `total = true`), it must be the only one, and
 every other constituent must have zero absorption at every wavelength.
 
-Inelastic processes in `layer.fluorophores` are not included; they are
-source terms for the solver (see the *Consumer API* docs page).
+Every absorber that excites a fluorescence process must itself be a
+constituent of the layer (the same object, or an equal one): otherwise its
+absorption would drive emission without attenuating the light.
 
 # Example
 ```julia
@@ -52,7 +60,7 @@ phyto = Phytoplankton{Float64, Bricaud1998}(Chl = 0.5)
 layer = OceanLayer(0.0, 5.0, AbstractOceanConstituent{Float64}[water, phyto])
 opt   = layer_optics(layer, collect(400.0:5.0:700.0); ℓ_max = 64)
 optical_depth(opt), single_scattering_albedo(opt)
-opt.components[2].label               # "Phytoplankton"
+opt.scatterers[2].label               # "Phytoplankton"
 ```
 """
 function layer_optics(layer::OceanLayer, λ_grid::AbstractVector{<:Real};
@@ -81,22 +89,45 @@ function _layer_optics(layer::OceanLayer, λ_grid, ℓ_max, polarized,
     Δz = FT(thickness(layer))
     constituents = layer.constituents
 
-    # --- absorption ---------------------------------------------------------
-    i_total = findall(is_total_absorption, constituents)
+    # --- absorption components -----------------------------------------------
+    absorbing = [c for c in constituents if c isa AbstractAbsorber]
+    i_total   = findall(is_total_absorption, absorbing)
     length(i_total) ≤ 1 ||
         throw(ArgumentError("layer_optics: $(length(i_total)) constituents declare total " *
                             "(bulk) absorption; at most one can"))
-    i_bulk = isempty(i_total) ? 0 : only(i_total)
-    τ_abs  = zeros(FT, length(λ))
-    for (i, c) in enumerate(constituents), (k, λk) in enumerate(λ)
-        a = FT(absorption(c, λk))
-        if i_bulk != 0 && i != i_bulk && a != 0
-            throw(ArgumentError("layer_optics: $(constituents[i_bulk]) is the total " *
-                                "absorption of the layer, but $(nameof(typeof(c))) also " *
-                                "absorbs (a = $a 1/m at λ = $λk nm); this would count " *
-                                "its absorbers twice"))
+    i_bulk    = isempty(i_total) ? 0 : only(i_total)
+    absorbers = AbsorptionComponent{FT}[]
+    first_part = Int[]            # index of each absorber's first component
+    for (i, c) in enumerate(absorbing)
+        parts = absorption_parts(c)
+        τ     = zeros(FT, length(parts), length(λ))
+        for (k, λk) in enumerate(λ)
+            a = absorption_by_part(c, λk)
+            if i_bulk != 0 && i != i_bulk && any(!iszero, a)
+                throw(ArgumentError("layer_optics: $(absorbing[i_bulk]) is the total " *
+                                    "absorption of the layer, but $(nameof(typeof(c))) also " *
+                                    "absorbs (a = $(sum(a)) 1/m at λ = $λk nm); this would " *
+                                    "count its absorbers twice"))
+            end
+            for j in eachindex(parts)
+                τ[j, k] = FT(a[j]) * Δz
+            end
         end
-        τ_abs[k] += a * Δz
+        push!(first_part, length(absorbers) + 1)
+        for (j, part) in enumerate(parts)
+            push!(absorbers, AbsorptionComponent{FT}(_component_label(c), part, τ[j, :]))
+        end
+    end
+
+    # --- inelastic components ---------------------------------------------
+    inelastic = map(layer.inelastic) do p
+        pathways = excitation_pathways(p)
+        index    = map(pathways) do x
+            i = _matching_absorber(absorbing, x.absorber, p, layer)
+            first_part[i] + findfirst(==(x.part), absorption_parts(absorbing[i])) - 1
+        end
+        InelasticComponent{FT}(string(nameof(typeof(p))), p, collect(Int, index),
+                               FT[x.efficiency for x in pathways])
     end
 
     # --- scattering components -------------------------------------------
@@ -114,8 +145,9 @@ function _layer_optics(layer::OceanLayer, λ_grid, ℓ_max, polarized,
     end
     components = [_scattering_component(c, λ, Δz, ℓ_max, polarized, FT, cache)
                   for c in scatterers]
-    return OceanLayerOptics{FT}(λ, FT(layer.depth_top), FT(layer.depth_bottom), τ_abs,
-                                components, ℓ_max + 1, polarized)
+    return OceanLayerOptics{FT}(λ, FT(layer.depth_top), FT(layer.depth_bottom), absorbers,
+                                components, collect(InelasticComponent{FT}, inelastic),
+                                ℓ_max + 1, polarized)
 end
 
 function _scattering_component(c, λ::Vector{FT}, Δz::FT, ℓ_max, polarized, ::Type{FT},
@@ -150,6 +182,24 @@ end
 
 _component_label(c::AbstractOceanConstituent) = string(nameof(typeof(c)))
 
+# The constituent of the layer that is the exciting absorber: the same object,
+# or else an equal one; it must be unique, so that excitation is attributed
+# to one absorption component.
+function _matching_absorber(absorbing, absorber, p, layer)
+    where_ = "$(nameof(typeof(p))) in the layer at $(layer.depth_top)–$(layer.depth_bottom) m"
+    i = findall(c -> c === absorber, absorbing)
+    isempty(i) && (i = findall(c -> isequal(c, absorber), absorbing))
+    isempty(i) &&
+        throw(ArgumentError("layer_optics: $where_ is excited by $absorber, which is not a " *
+                            "constituent of that layer. Add it to the constituents, so that " *
+                            "the light it absorbs is also removed from the radiation field."))
+    length(i) == 1 ||
+        throw(ArgumentError("layer_optics: $where_ is excited by $absorber, which appears " *
+                            "$(length(i)) times among the constituents; merge the equal " *
+                            "constituents into one"))
+    return only(i)
+end
+
 _convert_greek(::Type{FT}, g::GreekCoefficients{FT}) where {FT} = g
 _convert_greek(::Type{FT}, g::GreekCoefficients) where {FT} =
     GreekCoefficients{FT}((FT.(getfield(g, f)) for f in fieldnames(GreekCoefficients))...)
@@ -167,8 +217,10 @@ one `phase_id` and the same expansion objects across layers.
 
 `refractive_index` (an [`AbstractRefractiveIndexModel`](@ref), e.g.
 `FixedRefractiveIndex(1.34)` or `QuanFry1995(; temperature, salinity)`)
-and `bottom` (`BlackBottom()` or `LambertianBottom(albedo)`) are required:
-neither has a defensible default.
+and `bottom` are required: neither has a defensible default. The bottom
+is `BlackBottom()` (deep water), `LambertianBottom(albedo)` (one albedo,
+or one per wavelength of `λ`) or a [`TabulatedLambertianBottom`](@ref),
+which is interpolated onto `λ`.
 
 # Example
 ```julia
@@ -190,5 +242,17 @@ function column_optics(column::OceanColumn, λ_grid::AbstractVector{<:Real};
               for l in column]
     λ = first(layers).λ
     n = FT.(OceanOptics.refractive_index(refractive_index, λ))
-    return OceanColumnOptics(layers, n, bottom)
+    return OceanColumnOptics(layers, n, _resolve_bottom(bottom, λ, FT))
+end
+
+_resolve_bottom(b::AbstractOceanBottom, λ, FT) = b
+_resolve_bottom(b::LambertianBottom, λ, FT) = LambertianBottom(FT.(b.albedo))
+function _resolve_bottom(b::TabulatedLambertianBottom, λ, FT)
+    lo, hi = first(b.λ), last(b.λ)
+    all(x -> lo ≤ x ≤ hi, λ) ||
+        throw(DomainError(extrema(λ), "TabulatedLambertianBottom" *
+                          (isempty(b.source) ? "" : " ($(b.source))") * " covers $(lo)–$(hi) nm, " *
+                          "the column grid $(minimum(λ))–$(maximum(λ)) nm"))
+    tbl = SpectralTable(FT.(b.λ), FT.(b.albedo))
+    return LambertianBottom(FT[linterp(tbl, x) for x in λ])
 end

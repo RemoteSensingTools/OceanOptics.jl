@@ -175,6 +175,47 @@ says which one to use.
 """
 function scattering_phase end
 
+# -----------------------------------------------------------------------------
+# Absorption parts
+# -----------------------------------------------------------------------------
+#
+# An absorber may attribute its absorption to parts — phytoplankton with a
+# pigment partition splits a_ph into chlorophyll, carotenoid, … parts — so
+# that a solver can report the light absorbed by each and a fluorescence
+# process can name the parts that excite it. `layer_optics` makes one
+# absorption component per part.
+
+"""
+    absorption_parts(c::AbstractAbsorber) -> Tuple{Vararg{Symbol}}
+
+Names of the parts into which `c` attributes its absorption, in the order
+of [`absorption_by_part`](@ref). `(:total,)` unless `c` splits its
+absorption, as [`Phytoplankton`](@ref) does with a pigment partition.
+"""
+absorption_parts(::AbstractAbsorber) = (:total,)
+
+"""
+    absorption_by_part(c::AbstractAbsorber, λ) -> Tuple
+
+Absorption coefficient `[1/m]` of each part in
+[`absorption_parts`](@ref)`(c)` at `λ` `[nm]`; the parts sum to
+[`absorption`](@ref)`(c, λ)`.
+"""
+absorption_by_part(c::AbstractAbsorber, λ::Real) = (absorption(c, λ),)
+
+"""
+    absorption_part(c::AbstractAbsorber, part::Symbol, λ) -> FT
+
+Absorption coefficient `[1/m]` of one part of `c` at `λ` `[nm]`.
+"""
+function absorption_part(c::AbstractAbsorber, part::Symbol, λ::Real)
+    i = findfirst(==(part), absorption_parts(c))
+    i === nothing &&
+        throw(ArgumentError("$(nameof(typeof(c))) has no absorption part :$part; its parts " *
+                            "are $(absorption_parts(c))"))
+    return absorption_by_part(c, λ)[i]
+end
+
 # =============================================================================
 # Inelastic processes (fluorescence, Raman) — abstract root
 # =============================================================================

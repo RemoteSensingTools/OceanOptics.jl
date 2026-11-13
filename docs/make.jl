@@ -18,7 +18,7 @@ makedocs(
         # Chart pages embed their data (JSON + table) and have no image
         # fallback, so allow larger pages and example outputs.
         size_threshold         = 400 * 2^10,
-        size_threshold_warn    = 250 * 2^10,
+        size_threshold_warn    = 320 * 2^10,
         example_size_threshold = 96 * 2^10,
     ),
     pages    = [

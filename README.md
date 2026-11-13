@@ -14,9 +14,11 @@ no dependency on it. It is the ocean counterpart of
 
 - **Constituents:** `PureWater` (absorption `IOCCG2018` (default),
   `PopeFry1997`, `Kou1993`, `SmithBaker1981`; scattering `ZhangHu2009`
-  (default) or `Morel1974`), `CDOM`, `Phytoplankton{Bricaud1998}`,
-  `NonAlgalParticles`, and exact published values (`TabulatedAbsorber`,
-  with a `total` flag for bulk absorption; `TabulatedScatterer`).
+  (default) or `Morel1974`), `CDOM`, `Phytoplankton{Bricaud1998}`
+  (optionally split into pigment groups: `ProspectPigments`,
+  `Bidigare1990Pigments`), `NonAlgalParticles`, and exact published
+  values (`TabulatedAbsorber`, with a `total` flag for bulk absorption;
+  `TabulatedScatterer`).
 - **Phase functions and matrices**, expanded as `GreekCoefficients` in
   vSmartMOM's convention: `RayleighWaterPhase` (phase matrix),
   `FournierForandPhase` (Mobley et al. 2002 B → (n, μ) family),
@@ -25,13 +27,19 @@ no dependency on it. It is the ocean counterpart of
   hydrosols) and `WavelengthDependentPhase`. Expansions are integrated in
   scattering angle until converged; nothing is renormalized silently.
 - **Solver output:** `layer_optics` → `OceanLayerOptics` (absorption
-  optical depth plus one scattering component per constituent, each with
-  its phase-matrix expansion and a polarization label) and
+  components per constituent or pigment group; scattering components,
+  each with its phase-matrix expansion and a polarization label; inelastic
+  processes linked to the absorption that excites them) and
   `column_optics` → `OceanColumnOptics` (layers, interface refractive
-  index, bottom).
+  index, black or Lambertian floor).
 - **Seawater refractive index:** `FixedRefractiveIndex`, `QuanFry1995`.
-- **Inelastic kernels** for fluorescence and water Raman, with an
-  explicit photon/energy contract (`radiance_source_kernel`).
+- **Fluorescence and Raman:** chlorophyll fluorescence with the
+  chloroplast-level emission of the leaf model Fluspect, excited by
+  chlorophyll and a chosen share of carotenoid absorption; water Raman;
+  an explicit photon/energy contract (`radiance_source_kernel`).
+- **Absorbed light:** absorbed power, photons and PAR per layer and
+  component (e.g. by chlorophyll), and the fluorescence emission it
+  drives, from the solver's scalar irradiance.
 
 Every table throws outside its data range, scalar-only phase functions are
 never given an invented phase matrix, and published bulk absorption cannot
@@ -61,8 +69,21 @@ col = column_optics(column, collect(400.0:5.0:700.0);
 
 layer = col[1]
 optical_depth(layer), single_scattering_albedo(layer)
-[(c.label, c.polarization) for c in layer.components]   # PureWater :full, Phytoplankton :depolarizing
-greek_expansion(layer.components[2], 1)                # GreekCoefficients of the particles
+[(c.label, c.polarization) for c in layer.scatterers]   # PureWater :full, Phytoplankton :depolarizing
+greek_expansion(layer.scatterers[2], 1)                # GreekCoefficients of the particles
+```
+
+Chlorophyll fluorescence, excited by chlorophyll and half of the
+carotenoid absorption, and the PAR each pigment group absorbs:
+
+```julia
+phyto = Phytoplankton(Chl = 0.5, pigments = ProspectPigments(carotenoid_ratio = 0.3))
+sif   = chlorophyll_fluorescence(phyto; quantum_yield = 0.02, carotenoid_transfer = 0.5)
+layer = OceanLayer(0.0, 5.0, AbstractOceanConstituent{Float64}[water, phyto];
+                   inelastic = AbstractOceanInelasticProcess{Float64}[sif])
+o  = layer_optics(layer, collect(400.0:5.0:750.0))
+E₀ = ones(n_wavelengths(o))   # stand-in for the solver's layer-mean scalar irradiance [W m⁻² nm⁻¹]
+absorbed_par(o, E₀)           # µmol photons m⁻² s⁻¹ per absorption component
 ```
 
 ## Documentation
@@ -99,6 +120,9 @@ DOI, URL, retrieval date, unit changes):
 | `rottgers_2014_temperature.csv` | Röttgers et al. 2014, figshare (CC BY 4.0) | Temperature coefficient Ψ_T, 550–2500 nm |
 | `bricaud_1998_A.csv`, `bricaud_1998_E.csv` | Ocean Optics Web Book (CC-BY) | Phytoplankton `A(λ)`, `E(λ)`, 300–1000 nm |
 | `petzold_sdh.csv` | Ocean Optics Web Book (CC-BY) | Petzold San Diego Harbor VSF, 0.1°–180° |
+| `bidigare_1990_pigments.csv` | Ocean Optics Web Book (CC-BY) | In vivo specific absorption of algal pigment groups, 400–750 nm (Bidigare et al. 1990) |
+| `fluspect_chloroplast_emission.csv` | SCOPE `Optipar2017_ProspectD` (GPL-3.0; also in CliMA Land, Apache-2.0) | Chloroplast-level fluorescence emission (combined, PSI, PSII), 640–851 nm |
+| `prospect_d_pigment_absorption.csv` | as above | PROSPECT-D in vivo chlorophyll and carotenoid absorption, 400–800 nm |
 | `reference/loisel2023_hydrolight_iops.csv` | Loisel et al. 2023 (CC0) | HydroLight input IOPs: pure seawater and three scenarios |
 
 Cite the original papers in derived work.

@@ -4,7 +4,58 @@ All notable changes to OceanOptics.jl are recorded here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [Unreleased] — 0.2.0
+
+Light absorbed per constituent, chlorophyll fluorescence with
+land-analogous chloroplast emission, and the ocean floor, for the
+fluorescence and absorbed-PAR requirements of the coupled solver.
+
+### Changed (breaking)
+
+- `OceanLayerOptics` carries `absorbers` (one `AbsorptionComponent` per
+  absorber or absorption part: `label`, `part`, `τ`), `scatterers` (the
+  former `components`) and `inelastic` (one `InelasticComponent` per
+  process, with the indices of the absorption components that excite it
+  and their energy-transfer efficiencies). The `τ_abs` field is gone;
+  `absorption_optical_depth(o)` sums the absorption components.
+- `OceanLayer` and the column helpers take `inelastic` (formerly
+  `fluorophores`), since water Raman is not a fluorophore.
+- `IsotropicFluorescence(excitation; emission, quantum_yield,
+  excitation_range)` is driven by `ExcitationPathway`s (absorber, part,
+  efficiency η): `a^I = φ Σ_k η_k a_k`. Quantum yields have no default
+  (`chlorophyll_fluorescence`, `CDOMFluorescence`, `IsotropicFluorescence`);
+  previously 0.003 and 0.01 were implied.
+- `chlorophyll_fluorescence` defaults to the chloroplast-level emission of
+  Fluspect instead of a 685-nm Gaussian (still available through
+  `emission = GaussianEmission(...)`).
+- `layer_optics` throws if a fluorescence process is excited by an
+  absorber that is not a constituent of the layer.
+
+### Added
+
+- Absorption parts: `absorption_parts`, `absorption_by_part`,
+  `absorption_part`; `Phytoplankton(...; pigments)` with the pigment
+  partitions `ProspectPigments` (chlorophyll and carotenoids with the
+  PROSPECT-D leaf spectra used by Fluspect; land analogy) and
+  `Bidigare1990Pigments` (chlorophylls a, b, c, photosynthetic and
+  photoprotective carotenoids, phycoerythrins; Bidigare et al. 1990). The
+  total absorption is unchanged; unattributable absorption is
+  `:unassigned`.
+- `chlorophyll_fluorescence(phyto; quantum_yield, carotenoid_transfer,
+  phycobilin_transfer, transfer)`: chlorophyll-only excitation
+  (`carotenoid_transfer = 0`), carotenoids as lossless antenna (`1`), or
+  any share in between, per pigment group if needed.
+- `TabulatedEmission` and `chloroplast_emission([FT]; psi_share)`:
+  Fluspect's combined chloroplast emission, or a PSI/PSII mixture.
+- `absorbed_power`, `absorbed_photons`, `absorbed_par` and
+  `inelastic_emission`: light absorbed per layer and component, and the
+  emission it drives, from the solver's layer-mean scalar irradiance;
+  `excitation_optical_depth(o, j)` and `absorber_index(o, label, part)`.
+- `TabulatedLambertianBottom(λ, albedo; source)`: a floor albedo spectrum
+  on its own grid, interpolated onto the column grid by `column_optics`.
+- Data: `fluspect_chloroplast_emission.csv`, `prospect_d_pigment_absorption.csv`
+  (both from SCOPE's Optipar2017_ProspectD) and `bidigare_1990_pigments.csv`
+  (Ocean Optics Web Book, CC BY).
 
 ## [0.1.0] — 2026-10-16
 

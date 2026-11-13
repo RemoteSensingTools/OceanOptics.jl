@@ -15,8 +15,10 @@ documentation, not part of either package.
   `phase_function` and `scattering_matrix` refer to its analytic phase
   functions; OceanOptics uses [`greek_expansion`](@ref),
   [`scattering_phase`](@ref) and [`evaluate_scattering_matrix`](@ref).)
-* OceanOptics is not registered yet: register and tag it before a
-  vSmartMOM release declares it in `[weakdeps]`/`[compat]`.
+* OceanOptics v0.1.0 is in the General registry's queue; v0.2.0 (this
+  documentation) adds absorption and inelastic components and breaks the
+  v0.1 layer layout. Declare the version the adapter is written against in
+  vSmartMOM's `[weakdeps]`/`[compat]`.
 
 ## Mapping
 
@@ -24,11 +26,13 @@ documentation, not part of either package.
 |---|---|
 | [`GreekCoefficients`](@ref) `(α, β, γ, δ, ϵ, ζ)` | `Scattering.GreekCoefs(α, β, γ, δ, ϵ, ζ)` — same fields, order and signs |
 | [`ScatteringComponent`](@ref) | one `CoreScatteringOpticalProperties` per component, `ϖ = 1`, truncated like an aerosol type |
-| `absorption_optical_depth(layer)` | `CoreAbsorptionOpticalProperties(τ)` |
-| components within a layer | combined with vSmartMOM's `+` (weights `τ·ϖ`, identical to OceanOptics' scattering weights) |
+| `absorption_optical_depth(layer)` (sum of `layer.absorbers`) | `CoreAbsorptionOpticalProperties(τ)` |
+| scattering components within a layer | combined with vSmartMOM's `+` (weights `τ·ϖ`, identical to OceanOptics' scattering weights) |
 | layers of an [`OceanColumnOptics`](@ref) | vertical composition by adding on the water quadrature grid, below the refracting interface — never `*`, which concatenates spectral points |
 | `col.refractive_index` | interface index per spectral point (relative to air) |
-| `bottom_albedo(col)` | lower boundary of the water grid |
+| `bottom_albedo(col)` at `bottom_depth(col)` | Lambertian reflection operator (`m = 0`, intensity only) below the last layer; zero for `BlackBottom` |
+| `layer.absorbers` (individual `τ`) | absorbed power per component from the layer-mean scalar irradiance ([`absorbed_power`](@ref), [`absorbed_par`](@ref)) |
+| `layer.inelastic` | distributed sources (V3/V4): kernels of each `process`, excitation from the linked absorption components |
 | `λ` `[nm]` | evaluate at `λ = 10⁷ ./ ν`; decreasing grids are accepted |
 
 Rayleigh Greek values agree with `get_greek_rayleigh` exactly, and the
@@ -51,7 +55,7 @@ function layer_core_optics(layer, μ, m, pol, l_trunc)
     nλ   = n_wavelengths(layer)
     core = RT.CoreAbsorptionOpticalProperties(absorption_optical_depth(layer))
     scat = nothing
-    for c in layer.components
+    for c in layer.scatterers
         is_wavelength_dependent(c) &&               # per-band expansion assumed here
             error("$(c.label): one expansion per band expected")
         g = greek_expansion(c, 1)
@@ -99,5 +103,18 @@ implementation defines.
   matrices) are not converged at practical `ℓ_max` — e.g. the Chowdhary
   AOS-IV hydrosols still have `β₁₀₀₀/2001 ≈ 3×10⁻³` — so truncation is
   required, with its own convergence study.
+* **Absorbed light per layer.** Chlorophyll light-absorption profiles and
+  fluorescence need, per layer and spectral point, the layer-mean scalar
+  irradiance `(1/Δz) ∫ E₀ dz` (direct and diffuse, all directions),
+  integrated within each layer — sublayers or an analytic layer integral,
+  not interface values alone. With it, [`absorbed_power`](@ref),
+  [`absorbed_par`](@ref) and [`inelastic_emission`](@ref) give the
+  diagnostics and the reference fluorescence budget; energy closure
+  (net irradiance below the surface = absorbed in the layers + absorbed by
+  the floor) is the test.
 * **Inelastic sources** follow the photon contract on the
-  [Consumer API](@ref) page ([`radiance_source_kernel`](@ref)).
+  [Consumer API](@ref) page ([`radiance_source_kernel`](@ref)). For
+  fluorescence, [`excitation_optical_depth`](@ref)`(layer, j)` gives the
+  excitation optical depth on the layer grid from the linked absorption
+  components; [`excitation_absorption`](@ref) gives the same coefficient
+  at any wavelength.

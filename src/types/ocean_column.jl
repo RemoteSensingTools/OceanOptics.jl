@@ -20,7 +20,7 @@
 #       5 m below. Mirrors the grid used in Fell's North-Sea coupled
 #       atmosphere-ocean tests.
 #
-# Both helpers take a `fluorophores` keyword that is broadcast to every
+# Both helpers take an `inelastic` keyword that is broadcast to every
 # layer (typical pattern when chlorophyll fluorescence or Raman is
 # active throughout the water column).
 # =============================================================================
@@ -99,22 +99,22 @@ end
 # =============================================================================
 
 """
-    uniform_column(constituents; n_layers=10, depth=50.0, fluorophores=[])
+    uniform_column(constituents; n_layers=10, depth=50.0, inelastic=[])
 
 Build an `OceanColumn` with `n_layers` equal-thickness layers spanning
 0 → `depth` metres. Each layer carries the same `constituents` and
-`fluorophores` lists.
+`inelastic` lists.
 """
 function uniform_column(constituents::AbstractVector;
                         n_layers::Integer = 10,
                         depth              = 50.0,
-                        fluorophores::AbstractVector = AbstractOceanInelasticProcess{Float64}[])
+                        inelastic::AbstractVector = AbstractOceanInelasticProcess{Float64}[])
     n_layers > 0 ||
         throw(ArgumentError("uniform_column: n_layers must be positive"))
     depth > 0 ||
         throw(ArgumentError("uniform_column: depth must be positive"))
 
-    FT = _column_float_type(constituents, fluorophores)
+    FT = _column_float_type(constituents, inelastic)
     dz = FT(depth) / n_layers
 
     layers = Vector{OceanLayer{FT}}(undef, n_layers)
@@ -122,13 +122,13 @@ function uniform_column(constituents::AbstractVector;
         z_top = (i - 1) * dz
         z_bot = i * dz
         layers[i] = OceanLayer(z_top, z_bot, constituents;
-                               fluorophores = fluorophores)
+                               inelastic = inelastic)
     end
     return OceanColumn{FT}(layers)
 end
 
 """
-    fell_column(constituents; depth=60.0, fluorophores=[])
+    fell_column(constituents; depth=60.0, inelastic=[])
 
 Build an `OceanColumn` following Fell (1997) §5.2.1: 1 m layers in
 0–10 m, 2 m layers in 10–20 m, 5 m layers below. Truncates gracefully
@@ -137,11 +137,11 @@ depth` exactly.
 """
 function fell_column(constituents::AbstractVector;
                      depth::Real       = 60.0,
-                     fluorophores::AbstractVector = AbstractOceanInelasticProcess{Float64}[])
+                     inelastic::AbstractVector = AbstractOceanInelasticProcess{Float64}[])
     depth > 0 ||
         throw(ArgumentError("fell_column: depth must be positive"))
 
-    FT = _column_float_type(constituents, fluorophores)
+    FT = _column_float_type(constituents, inelastic)
     D  = FT(depth)
 
     # Boundary list: 0 → 10 at Δ=1, 10 → 20 at Δ=2, 20 → D at Δ=5
@@ -154,7 +154,7 @@ function fell_column(constituents::AbstractVector;
     last(boundaries) == D || push!(boundaries, D)
 
     layers = [OceanLayer(boundaries[i], boundaries[i+1], constituents;
-                         fluorophores = fluorophores)
+                         inelastic = inelastic)
               for i in 1:length(boundaries)-1]
     return OceanColumn{FT}(layers)
 end
@@ -174,13 +174,13 @@ function _append_staircase!(boundaries::Vector{FT}, D::FT, Δ::FT, upper::FT) wh
     return boundaries
 end
 
-# Infer FT from the constituents or fluorophores (first non-empty one wins).
+# Infer FT from the constituents or inelastic processes (first non-empty one wins).
 function _column_float_type(constituents::AbstractVector,
-                            fluorophores::AbstractVector)
+                            inelastic::AbstractVector)
     if !isempty(constituents)
         return _constituent_float_type(first(constituents))
-    elseif !isempty(fluorophores)
-        return _fluorophore_float_type(first(fluorophores))
+    elseif !isempty(inelastic)
+        return _inelastic_float_type(first(inelastic))
     else
         return Float64
     end

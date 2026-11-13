@@ -3,13 +3,16 @@
 # =============================================================================
 #
 # A layer is described the way plane-parallel solvers combine optical
-# properties: one absorption optical depth plus one scattering component
-# per scattering constituent, each with its own scattering optical depth
-# and phase-matrix expansion. Mixed quantities (total τ, ϖ, the mixed
-# expansion) are derived on demand. Keeping components separate lets a
-# solver build each component's phase operators once per band and truncate
-# them individually, as it does for aerosol types, and it keeps the
-# provenance of every phase matrix visible.
+# properties: absorption components (one per absorber, or per absorption
+# part such as a pigment group), scattering components (one per scatterer,
+# with its phase-matrix expansion) and the inelastic processes active in
+# the layer, each linked to the absorption components that excite it.
+# Mixed quantities (total τ, ϖ, the mixed expansion) are derived on demand.
+# Keeping components separate lets a solver build each component's phase
+# operators once per band and truncate them individually, as it does for
+# aerosol types; lets it report the light absorbed by each constituent
+# (absorbed PAR, fluorescence excitation); and keeps the provenance of
+# every phase matrix visible.
 # =============================================================================
 
 _is_strictly_increasing(x::AbstractVector) = all(i -> x[i] < x[i+1], firstindex(x):lastindex(x)-1)
@@ -126,6 +129,74 @@ backscatter_fraction(c::ScatteringComponent, iλ::Integer) =
                                  first(c.backscatter_fraction)
 
 # =============================================================================
+# Absorption and inelastic components
+# =============================================================================
+
+"""
+$(TYPEDEF)
+
+Absorption by one constituent of a layer, or by one part of it (see
+[`absorption_parts`](@ref)): `τ = a·Δz` per wavelength.
+
+# Fields
+$(TYPEDFIELDS)
+"""
+struct AbsorptionComponent{FT}
+    "Constituent the component came from (type name, or the source of tabulated data)"
+    label::String
+    "Absorption part of the constituent (`:total` unless it splits its absorption)"
+    part::Symbol
+    "Absorption optical depth `a·Δz` per wavelength"
+    τ::Vector{FT}
+
+    function AbsorptionComponent{FT}(label, part, τ) where {FT}
+        all(x -> isfinite(x) && x ≥ 0, τ) ||
+            throw(ArgumentError("AbsorptionComponent \"$label\" (:$part): absorption optical " *
+                                "depths must be finite and non-negative"))
+        new{FT}(label, part, τ)
+    end
+end
+
+AbsorptionComponent(label::AbstractString, part::Symbol, τ::AbstractVector{FT}) where {FT} =
+    AbsorptionComponent{FT}(String(label), part, collect(τ))
+
+"""
+$(TYPEDEF)
+
+An inelastic process (fluorescence, water Raman) active in a layer, with
+the absorption components of the layer that excite it.
+
+# Fields
+$(TYPEDFIELDS)
+
+For fluorescence, `excitation[k]` indexes the layer's `absorbers` and
+`efficiency[k]` is the energy-transfer efficiency η of that pathway, so
+that the excitation coefficient on the layer grid is
+`quantum_yield(process) · Σ_k efficiency[k] · absorbers[excitation[k]].τ / Δz`
+— the same as [`excitation_absorption`](@ref)`(process, λ)`. Water Raman
+has no excitation components.
+"""
+struct InelasticComponent{FT}
+    "Process type name"
+    label::String
+    "The process, with its kernels (excitation, emission, quantum yield)"
+    process::AbstractOceanInelasticProcess
+    "Indices of the layer's absorption components that excite the process"
+    excitation::Vector{Int}
+    "Energy-transfer efficiency η of each excitation component"
+    efficiency::Vector{FT}
+
+    function InelasticComponent{FT}(label, process, excitation, efficiency) where {FT}
+        length(excitation) == length(efficiency) ||
+            throw(DimensionMismatch("InelasticComponent \"$label\": $(length(efficiency)) " *
+                                    "efficiencies for $(length(excitation)) excitation components"))
+        all(η -> isfinite(η) && 0 ≤ η ≤ 1, efficiency) ||
+            throw(ArgumentError("InelasticComponent \"$label\": efficiencies must lie in [0, 1]"))
+        new{FT}(label, process, excitation, efficiency)
+    end
+end
+
+# =============================================================================
 # Layer
 # =============================================================================
 
@@ -140,18 +211,22 @@ $(TYPEDFIELDS)
 
 # Derived quantities
 
+[`absorption_optical_depth`](@ref) (all absorbers),
 [`optical_depth`](@ref), [`scattering_optical_depth`](@ref),
 [`single_scattering_albedo`](@ref), [`backscatter_fraction`](@ref) and
 the mixed expansion [`greek_expansion`](@ref)`(o, iλ)` — the
-scattering-weighted mixture of the components.
+scattering-weighted mixture of the scattering components. Light absorbed
+per component, given the scalar irradiance: [`absorbed_power`](@ref),
+[`absorbed_photons`](@ref), [`absorbed_par`](@ref).
 
 # Validation
 
 `λ` finite, positive and strictly monotone (increasing or decreasing);
 `0 ≤ depth_top < depth_bottom`; optical depths finite and non-negative;
-every component on the same wavelength grid, with `n_moments` terms and
-the layer's polarization. Arrays are checked at construction; mutating
-them afterwards is not re-checked.
+every component on the same wavelength grid; scattering components with
+`n_moments` terms and the layer's polarization; inelastic components
+referring to existing absorption components. Arrays are checked at
+construction; mutating them afterwards is not re-checked.
 """
 struct OceanLayerOptics{FT}
     "Wavelengths `[nm]`, strictly monotone"
@@ -160,18 +235,21 @@ struct OceanLayerOptics{FT}
     depth_top::FT
     "Depth of the layer bottom below the surface `[m]`"
     depth_bottom::FT
-    "Absorption optical depth `a·Δz` per wavelength (all absorbers)"
-    τ_abs::Vector{FT}
+    "Absorption components, one per absorber or absorption part"
+    absorbers::Vector{AbsorptionComponent{FT}}
     "Scattering components, one per scattering constituent"
-    components::Vector{ScatteringComponent{FT}}
+    scatterers::Vector{ScatteringComponent{FT}}
+    "Inelastic processes, with the absorption components that excite them"
+    inelastic::Vector{InelasticComponent{FT}}
     "Number of expansion terms, `ℓ_max + 1`"
     n_moments::Int
-    "Whether every component carries phase-matrix coefficients"
+    "Whether every scattering component carries phase-matrix coefficients"
     polarized::Bool
 
-    function OceanLayerOptics{FT}(λ, depth_top, depth_bottom, τ_abs, components,
+    function OceanLayerOptics{FT}(λ, depth_top, depth_bottom, absorbers, scatterers, inelastic,
                                   n_moments, polarized) where {FT}
-        o = new{FT}(λ, depth_top, depth_bottom, τ_abs, components, n_moments, polarized)
+        o = new{FT}(λ, depth_top, depth_bottom, absorbers, scatterers, inelastic, n_moments,
+                    polarized)
         _validate_layer(o)
         return o
     end
@@ -188,12 +266,18 @@ function _validate_layer(o::OceanLayerOptics)
     isfinite(o.depth_top) && isfinite(o.depth_bottom) && 0 ≤ o.depth_top < o.depth_bottom ||
         throw(ArgumentError("$who: need 0 ≤ depth_top < depth_bottom, got " *
                             "$(o.depth_top)–$(o.depth_bottom) m"))
-    length(o.τ_abs) == nλ ||
-        throw(DimensionMismatch("$who: $(length(o.τ_abs)) absorption optical depths for $nλ wavelengths"))
-    all(x -> isfinite(x) && x ≥ 0, o.τ_abs) ||
-        throw(ArgumentError("$who: absorption optical depths must be finite and non-negative"))
+    for c in o.absorbers
+        length(c.τ) == nλ ||
+            throw(DimensionMismatch("$who: absorption component \"$(c.label)\" (:$(c.part)) has " *
+                                    "$(length(c.τ)) optical depths for $nλ wavelengths"))
+    end
+    for c in o.inelastic
+        all(i -> 1 ≤ i ≤ length(o.absorbers), c.excitation) ||
+            throw(ArgumentError("$who: inelastic component \"$(c.label)\" refers to a missing " *
+                                "absorption component"))
+    end
     o.n_moments ≥ 1 || throw(ArgumentError("$who: n_moments must be positive"))
-    for c in o.components
+    for c in o.scatterers
         length(c.τ) == nλ ||
             throw(DimensionMismatch("$who: component \"$(c.label)\" has $(length(c.τ)) " *
                                     "optical depths for $nλ wavelengths"))
@@ -222,20 +306,44 @@ carries all six phase-matrix coefficients.
 """
 is_polarized(o::OceanLayerOptics) = o.polarized
 
-"Absorption optical depth per wavelength."
-absorption_optical_depth(o::OceanLayerOptics) = o.τ_abs
+"""
+    absorber_index(o::OceanLayerOptics, label, part = :total) -> Int
 
-"Scattering optical depth per wavelength, summed over components."
+Index in `o.absorbers` (and in the rows of [`absorbed_power`](@ref) and
+the entries of [`absorbed_par`](@ref)) of the absorption component with
+`label` and `part`, e.g. `absorber_index(o, "Phytoplankton", :chlorophyll)`.
+Throws if there is no such component or more than one.
+"""
+function absorber_index(o::OceanLayerOptics, label::AbstractString, part::Symbol = :total)
+    i = findall(c -> c.label == label && c.part === part, o.absorbers)
+    length(i) == 1 && return only(i)
+    throw(ArgumentError(isempty(i) ?
+        "absorber_index: no absorption component \"$label\" (:$part); the layer has " *
+        join(("\"$(c.label)\" (:$(c.part))" for c in o.absorbers), ", ") :
+        "absorber_index: $(length(i)) absorption components \"$label\" (:$part); " *
+        "give equal constituents distinct sources or index o.absorbers directly"))
+end
+
+"Absorption optical depth per wavelength, summed over absorption components."
+function absorption_optical_depth(o::OceanLayerOptics{FT}) where {FT}
+    τ = zeros(FT, n_wavelengths(o))
+    for c in o.absorbers
+        τ .+= c.τ
+    end
+    return τ
+end
+
+"Scattering optical depth per wavelength, summed over scattering components."
 function scattering_optical_depth(o::OceanLayerOptics{FT}) where {FT}
     τ = zeros(FT, n_wavelengths(o))
-    for c in o.components
+    for c in o.scatterers
         τ .+= c.τ
     end
     return τ
 end
 
 "Total (extinction) optical depth `τ_abs + τ_scat` per wavelength."
-optical_depth(o::OceanLayerOptics) = o.τ_abs .+ scattering_optical_depth(o)
+optical_depth(o::OceanLayerOptics) = absorption_optical_depth(o) .+ scattering_optical_depth(o)
 
 """
     single_scattering_albedo(o::OceanLayerOptics) -> Vector
@@ -244,7 +352,7 @@ optical_depth(o::OceanLayerOptics) = o.τ_abs .+ scattering_optical_depth(o)
 """
 function single_scattering_albedo(o::OceanLayerOptics{FT}) where {FT}
     τs = scattering_optical_depth(o)
-    τ  = o.τ_abs .+ τs
+    τ  = absorption_optical_depth(o) .+ τs
     return [τ[i] > 0 ? τs[i] / τ[i] : zero(FT) for i in eachindex(τ)]
 end
 
@@ -257,7 +365,7 @@ functions per wavelength; zero where the layer does not scatter.
 function backscatter_fraction(o::OceanLayerOptics{FT}) where {FT}
     τs = scattering_optical_depth(o)
     B  = zeros(FT, n_wavelengths(o))
-    for c in o.components, i in eachindex(B)
+    for c in o.scatterers, i in eachindex(B)
         B[i] += c.τ[i] * backscatter_fraction(c, i)
     end
     return [τs[i] > 0 ? B[i] / τs[i] : zero(FT) for i in eachindex(B)]
@@ -272,18 +380,20 @@ does not scatter, the isotropic expansion `β = [1, 0, …]` (zero
 polarization terms).
 """
 function greek_expansion(o::OceanLayerOptics{FT}, iλ::Integer) where {FT}
-    w = [c.τ[iλ] for c in o.components]
+    w = [c.τ[iλ] for c in o.scatterers]
     if isempty(w) || sum(w) == 0
         β = zeros(FT, o.n_moments); β[1] = one(FT)
         g = GreekCoefficients(β)
         return o.polarized ? depolarized(g) : g
     end
-    return mix_greek(w, [greek_expansion(c, iλ) for c in o.components])
+    return mix_greek(w, [greek_expansion(c, iλ) for c in o.scatterers])
 end
 
 function Base.show(io::IO, o::OceanLayerOptics{FT}) where {FT}
     print(io, "OceanLayerOptics{$FT}($(o.depth_top)–$(o.depth_bottom) m, ",
-          n_wavelengths(o), " λ, ", length(o.components), " scattering components, ",
+          n_wavelengths(o), " λ, ", length(o.absorbers), " absorption, ",
+          length(o.scatterers), " scattering",
+          isempty(o.inelastic) ? "" : ", $(length(o.inelastic)) inelastic", " components, ",
           "ℓ ≤ $(o.n_moments - 1), ", o.polarized ? "polarized" : "scalar", ")")
 end
 
@@ -322,6 +432,49 @@ LambertianBottom(albedo::Real) = LambertianBottom{float(typeof(albedo))}([float(
 LambertianBottom(albedo::AbstractVector{<:Real}) =
     LambertianBottom{float(eltype(albedo))}(collect(float(eltype(albedo)), albedo))
 
+"""
+$(TYPEDEF)
+
+Lambertian bottom whose albedo spectrum is tabulated on its own wavelength
+grid, e.g. a measured sediment, seagrass or coral reflectance.
+[`column_optics`](@ref) interpolates it linearly onto the column's
+wavelengths (which must lie within the table) and stores the result as a
+[`LambertianBottom`](@ref).
+
+# Fields
+$(TYPEDFIELDS)
+
+# Construction
+
+    TabulatedLambertianBottom(λ, albedo; source = "")
+"""
+struct TabulatedLambertianBottom{FT} <: AbstractOceanBottom
+    "Wavelengths `[nm]`, strictly increasing"
+    λ::Vector{FT}
+    "Albedo at each `λ`, in `[0, 1]`"
+    albedo::Vector{FT}
+    "Provenance"
+    source::String
+
+    function TabulatedLambertianBottom{FT}(λ, albedo, source) where {FT}
+        who = "TabulatedLambertianBottom"
+        length(λ) ≥ 2 || throw(ArgumentError("$who: need at least two wavelengths"))
+        all(x -> isfinite(x) && x > 0, λ) && _is_strictly_increasing(λ) ||
+            throw(ArgumentError("$who: wavelengths must be finite, positive and strictly increasing"))
+        length(albedo) == length(λ) ||
+            throw(DimensionMismatch("$who: $(length(albedo)) albedos for $(length(λ)) wavelengths"))
+        all(a -> isfinite(a) && 0 ≤ a ≤ 1, albedo) ||
+            throw(ArgumentError("$who: albedo must lie in [0, 1]"))
+        new{FT}(λ, albedo, source)
+    end
+end
+
+function TabulatedLambertianBottom(λ::AbstractVector{<:Real}, albedo::AbstractVector{<:Real};
+                                   source::AbstractString = "")
+    FT = float(promote_type(eltype(λ), eltype(albedo)))
+    return TabulatedLambertianBottom{FT}(collect(FT, λ), collect(FT, albedo), String(source))
+end
+
 # =============================================================================
 # Column
 # =============================================================================
@@ -332,7 +485,10 @@ $(TYPEDEF)
 Optical description of a whole water column, produced by
 [`column_optics`](@ref): contiguous layers from the surface down on one
 wavelength grid, the refractive index of the water at the surface relative
-to air, and the bottom.
+to air, and the bottom: `BlackBottom`, or `LambertianBottom` with one
+albedo per wavelength or one for all (a [`TabulatedLambertianBottom`](@ref)
+given to [`column_optics`](@ref) is resolved into the latter). Other
+`AbstractOceanBottom` subtypes pass through for solvers that know them.
 
 # Fields
 $(TYPEDFIELDS)
@@ -383,6 +539,9 @@ function _validate_column(col::OceanColumnOptics)
         length(col.bottom.albedo) in (1, nλ) ||
             throw(DimensionMismatch("$who: bottom albedo needs 1 or $nλ values"))
     end
+    col.bottom isa TabulatedLambertianBottom &&
+        throw(ArgumentError("$who: a TabulatedLambertianBottom must be interpolated onto the " *
+                            "column grid; pass it to column_optics"))
     return nothing
 end
 

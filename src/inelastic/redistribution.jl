@@ -11,15 +11,20 @@
 # is redistributed over emission wavelength `λ`. It is dimensioned
 # `[1/nm]` and normalized `∫ f(λ', λ) dλ = 1` for every excitation `λ'`.
 #
-# Two shapes cover the ocean cases of interest:
+# Three shapes cover the ocean cases of interest:
 #
+# * `TabulatedEmission(λ, shape)`    — tabulated emission spectrum,
+#                                      independent of `λ'`; e.g. the
+#                                      chloroplast-level chlorophyll
+#                                      emission of Fluspect
+#                                      (`chloroplast_emission`).
 # * `GaussianEmission(center, σ)`    — Gaussian in *wavelength* space,
 #                                      centered at a fixed `center`
-#                                      regardless of `λ'`. This is the
-#                                      chlorophyll-a fluorescence profile
-#                                      (685 nm, σ = 10.6 nm per Fell 1997
-#                                      §2.2.9) and the standard CDOM
-#                                      fluorescence model.
+#                                      regardless of `λ'`: the single-band
+#                                      chlorophyll-a profile (685 nm,
+#                                      σ = 10.6 nm per Fell 1997 §2.2.9)
+#                                      and the standard CDOM fluorescence
+#                                      model.
 # * `WavenumberShiftEmission(Δν, σ_ν)` — Gaussian in *wavenumber* space,
 #                                      centered at `ν' - Δν` where
 #                                      `ν = 10⁷/λ` [1/cm]. Water Raman
@@ -97,6 +102,88 @@ function redistribution(r::GaussianEmission, λ_prime::Real, λ::Real)
     σ = r.σ_nm
     μ = r.center_nm
     return inv(σ * sqrt(2π)) * exp(-((λ - μ) / σ)^2 / 2)
+end
+
+# -----------------------------------------------------------------------------
+# Tabulated emission spectrum
+# -----------------------------------------------------------------------------
+
+"""
+$(TYPEDEF)
+
+Emission spectrum tabulated in wavelength, independent of excitation:
+photon density `f(λ)` `[1/nm]`, interpolated linearly between the
+tabulated points and zero outside them.
+
+# Fields
+$(TYPEDFIELDS)
+
+# Construction
+
+    TabulatedEmission(λ, shape; units = :photons, source = "")
+
+`λ` `[nm]` strictly increasing; `shape` finite, non-negative and not all
+zero, in any scale. `shape` is a spectral *shape*: it is divided by its
+trapezoidal integral, which makes the interpolated density integrate to
+exactly one. With `units = :energy`, `shape` is an energy spectrum (as
+most measured emission spectra are) and is first converted to photon
+numbers, `∝ shape · λ`. Tabulate down to zero at both ends: the density
+drops to zero outside the table.
+"""
+struct TabulatedEmission{FT<:AbstractFloat} <: AbstractSpectralRedistribution{FT}
+    "Emission wavelengths `[nm]`, strictly increasing"
+    λ::Vector{FT}
+    "Photon density `[1/nm]` at each `λ`, with unit trapezoidal integral"
+    density::Vector{FT}
+    "Provenance: citation, table and any transformation applied"
+    source::String
+
+    function TabulatedEmission{FT}(λ::Vector{FT}, density::Vector{FT},
+                                   source::String) where {FT<:AbstractFloat}
+        who = "TabulatedEmission"
+        length(λ) ≥ 2 || throw(ArgumentError("$who: need at least two wavelengths"))
+        _check_exact_λ_grid(λ, who)
+        length(density) == length(λ) ||
+            throw(DimensionMismatch("$who: $(length(density)) values for $(length(λ)) wavelengths"))
+        all(x -> isfinite(x) && x ≥ 0, density) ||
+            throw(ArgumentError("$who: the emission shape must be finite and non-negative"))
+        area = _trapezoid(λ, density)
+        abs(area - 1) ≤ sqrt(eps(FT)) ||
+            throw(ArgumentError("$who: the density integrates to $area, not 1"))
+        new{FT}(λ, density, source)
+    end
+end
+
+function TabulatedEmission(λ::AbstractVector{<:Real}, shape::AbstractVector{<:Real};
+                           units::Symbol = :photons, source::AbstractString = "")
+    units in (:photons, :energy) ||
+        throw(ArgumentError("TabulatedEmission: units must be :photons or :energy, got :$units"))
+    FT = float(promote_type(eltype(λ), eltype(shape)))
+    x  = collect(FT, λ)
+    y  = collect(FT, shape)
+    length(x) == length(y) ||
+        throw(DimensionMismatch("TabulatedEmission: $(length(y)) values for $(length(x)) wavelengths"))
+    all(v -> isfinite(v) && v ≥ 0, y) ||
+        throw(ArgumentError("TabulatedEmission: the emission shape must be finite and non-negative"))
+    units === :energy && (y .*= x)
+    area = _trapezoid(x, y)
+    area > 0 || throw(ArgumentError("TabulatedEmission: the emission shape is zero everywhere"))
+    return TabulatedEmission{FT}(x, y ./ area, String(source))
+end
+
+_trapezoid(x, y) = sum((x[i+1] - x[i]) * (y[i] + y[i+1]) / 2 for i in 1:length(x)-1)
+
+function redistribution(r::TabulatedEmission, λ_prime::Real, λ::Real)
+    x, y = r.λ, r.density
+    first(x) ≤ λ ≤ last(x) || return zero(promote_type(eltype(y), typeof(float(λ))))
+    i = clamp(searchsortedlast(x, λ), 1, length(x) - 1)
+    t = (λ - x[i]) / (x[i+1] - x[i])
+    return (1 - t) * y[i] + t * y[i+1]
+end
+
+function Base.show(io::IO, r::TabulatedEmission{FT}) where {FT}
+    print(io, "TabulatedEmission{$FT}(", first(r.λ), "–", last(r.λ), " nm",
+          isempty(r.source) ? "" : ", \"$(r.source)\"", ")")
 end
 
 # -----------------------------------------------------------------------------

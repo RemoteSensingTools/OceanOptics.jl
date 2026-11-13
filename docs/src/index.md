@@ -57,18 +57,20 @@ phyto = Phytoplankton{Float64, Bricaud1998}(Chl = 0.5)
 layer = OceanLayer(0.0, 5.0,
                    AbstractOceanConstituent{Float64}[water, cdom, phyto])
 
-# 2. Optical properties on a wavelength grid: absorption plus one
-#    scattering component per constituent
+# 2. Optical properties on a wavelength grid: absorption and scattering
+#    components per constituent
 opt = layer_optics(layer, collect(400.0:5.0:700.0); ℓ_max = 32)
 optical_depth(opt)              # τ per λ
 single_scattering_albedo(opt)   # ϖ per λ
-opt.components[2].greek         # phytoplankton expansion (GreekCoefficients)
+opt.scatterers[2].greek         # phytoplankton expansion (GreekCoefficients)
 greek_expansion(opt, 1)         # mixed expansion at 400 nm
 
-# 3. Inelastic kernels for a downstream two-pass RT solver
-sif = chlorophyll_fluorescence(phyto)
-excitation_absorption(sif, 440.0)   # φ · a_φ(440)
-emission(sif, 440.0, 685.0)         # Gaussian at 685 nm, σ = 10.6 nm
+# 3. Chlorophyll fluorescence: chloroplast-level emission (Fluspect),
+#    excitation by chlorophyll plus half of the carotenoid absorption
+pig = Phytoplankton(Chl = 0.5, pigments = ProspectPigments(carotenoid_ratio = 0.3))
+sif = chlorophyll_fluorescence(pig; quantum_yield = 0.02, carotenoid_transfer = 0.5)
+excitation_absorption(sif, 440.0)   # φ · (a_chl + 0.5 a_car) at 440 nm
+emission(sif, 440.0, 685.0)         # photons per nm at 685 nm
 ```
 
 For a longer walk-through with numerical output, see
@@ -77,18 +79,25 @@ For a longer walk-through with numerical output, see
 ## What's covered
 
 * **Materials**: [`PureWater`](@ref), [`CDOM`](@ref),
-  [`Phytoplankton`](@ref), [`NonAlgalParticles`](@ref). See
-  [Materials](@ref).
+  [`Phytoplankton`](@ref) (optionally with a pigment partition,
+  [`ProspectPigments`](@ref) or [`Bidigare1990Pigments`](@ref)),
+  [`NonAlgalParticles`](@ref). See [Materials](@ref).
 * **Phase functions and matrices**: [`RayleighWaterPhase`](@ref),
   [`FournierForandPhase`](@ref), [`HenyeyGreensteinPhase`](@ref),
   [`PetzoldPhase`](@ref), [`TabulatedGreekPhase`](@ref),
   [`TabulatedMuellerPhase`](@ref), [`WavelengthDependentPhase`](@ref),
   expanded as [`GreekCoefficients`](@ref). See [Phase functions](@ref).
-* **Solver output**: [`layer_optics`](@ref) → [`OceanLayerOptics`](@ref),
+* **Solver output**: [`layer_optics`](@ref) → [`OceanLayerOptics`](@ref)
+  (absorption, scattering and inelastic components),
   [`column_optics`](@ref) → [`OceanColumnOptics`](@ref) with the
-  interface [`refractive_index`](@ref) and bottom. See
-  [Consumer API](@ref) and [vSmartMOM integration](@ref).
-* **Inelastic processes**: [`IsotropicFluorescence`](@ref),
+  interface [`refractive_index`](@ref) and the floor (black or
+  Lambertian). See [Consumer API](@ref) and [vSmartMOM integration](@ref).
+* **Absorbed light**: [`absorbed_power`](@ref), [`absorbed_par`](@ref)
+  and [`inelastic_emission`](@ref) per layer and component, from the
+  solver's scalar irradiance.
+* **Inelastic processes**: [`IsotropicFluorescence`](@ref) with
+  [`ExcitationPathway`](@ref)s, [`chlorophyll_fluorescence`](@ref) with
+  the chloroplast-level emission of Fluspect ([`chloroplast_emission`](@ref)),
   [`CDOMFluorescence`](@ref), [`WaterRaman`](@ref). See
   [Inelastic processes](@ref).
 * **Layer + column**: [`OceanLayer`](@ref), [`OceanColumn`](@ref),

@@ -10,6 +10,7 @@ using ForwardDiff
     include("test_greek.jl")
     include("test_phase.jl")
     include("test_phytoplankton.jl")
+    include("test_pigments.jl")
     include("test_nap.jl")
     include("test_redistribution.jl")
     include("test_fluorescence.jl")
@@ -17,6 +18,7 @@ using ForwardDiff
     include("test_tabulated.jl")
     include("test_hydrolight_reference.jl")
     include("test_layer_optics.jl")
+    include("test_absorbed_light.jl")
     include("test_column.jl")
     include("test_ad.jl")
 end

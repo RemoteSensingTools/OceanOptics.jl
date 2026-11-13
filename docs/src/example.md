@@ -45,15 +45,16 @@ b_phyto = scattering(phyto, λ)
 
 Stack the three constituents in a 5-m surface layer and compute its
 optical properties at 10-nm resolution across the visible. The result
-holds the absorption optical depth and one scattering component per
-scattering constituent (here water and phytoplankton; CDOM only absorbs):
+holds one absorption component per absorber and one scattering component
+per scattering constituent (here water and phytoplankton; CDOM only
+absorbs):
 
 ```@example ex
 layer = OceanLayer(0.0, 5.0,
                    AbstractOceanConstituent{Float64}[water, cdom, phyto])
 λ_grid = collect(400.0:10.0:700.0)
 opt    = layer_optics(layer, λ_grid; ℓ_max = 32)
-[(c.label, c.polarization) for c in opt.components]
+[(c.label, c.part) for c in opt.absorbers], [(c.label, c.polarization) for c in opt.scatterers]
 ```
 
 Mixed quantities are derived from the components:
@@ -101,37 +102,66 @@ col = column_optics(column, [450.0, 550.0, 650.0];
 (n_layers(col), col.refractive_index)
 ```
 
-## Inelastic kernels
+## Chlorophyll absorption and fluorescence
 
-Chlorophyll-a fluorescence is built from the phytoplankton absorber
-plus a Gaussian emission band at 685 nm. The package returns kernels
-a downstream two-pass RT solver convolves against the pass-1
-irradiance; we do not solve RT here.
+To follow the light absorbed by chlorophyll, give the phytoplankton a
+pigment partition. [`ProspectPigments`](@ref) splits its absorption into
+chlorophyll and carotenoids with the leaf spectra of PROSPECT-D (the land
+analogy); [`Bidigare1990Pigments`](@ref) uses ocean pigment groups. The
+total absorption is unchanged:
 
 ```@example ex
-sif = chlorophyll_fluorescence(phyto)
-sif
+pig = Phytoplankton(Chl = 0.5, pigments = ProspectPigments(carotenoid_ratio = 0.3))
+a = absorption_by_part(pig, 490.0)
+(absorption_parts(pig), a, sum(a) ≈ absorption(pig, 490.0))
 ```
 
+Fluorescence is excited by chlorophyll absorption and by the share `η`
+of carotenoid absorption passed to chlorophyll (`0`: chlorophyll only;
+`1`: lossless antenna). The default emission is the chloroplast-level
+spectrum of the leaf model Fluspect; the quantum yield is always given:
+
 ```@example ex
-excitation_absorption(sif, 440.0)           # φ · a_φ(440): photons, yield included
+chl_only = chlorophyll_fluorescence(pig; quantum_yield = 0.02, carotenoid_transfer = 0.0)
+antenna  = chlorophyll_fluorescence(pig; quantum_yield = 0.02, carotenoid_transfer = 0.5)
+excitation_absorption(chl_only, 490.0), excitation_absorption(antenna, 490.0)
+```
+
+The emission density (photons per nm) has its maxima at 685 and 739 nm:
+
+```@example ex
+using Printf
+println(" λ [nm]    f(λ) [1/nm]")
+for λ in (660.0, 685.0, 700.0, 720.0, 739.0, 760.0, 800.0)
+    @printf("%6.1f    %.5f\n", λ, emission(antenna, 440.0, λ))
+end
 ```
 
 [`radiance_source_kernel`](@ref) adds the photon-energy ratio `λ'/λ`
 needed for an energy (radiance) source:
 
 ```@example ex
-radiance_source_kernel(sif, 440.0, 685.0) / inelastic_coefficient(sif, 440.0, 685.0)
+radiance_source_kernel(antenna, 440.0, 685.0) / inelastic_coefficient(antenna, 440.0, 685.0)
 ```
 
-The emission density peaks at 685 nm with FWHM ≈ 25 nm:
+In a layer, the process is linked to the absorption components that
+excite it, and the light each component absorbs follows from the
+solver's layer-mean scalar irradiance. Here a uniform 1 W m⁻² nm⁻¹ stands
+in for the solver's field:
 
 ```@example ex
-using Printf
-println(" λ [nm]    f(440, λ) [1/nm]")
-for λ in (640.0, 670.0, 680.0, 685.0, 690.0, 700.0, 730.0)
-    @printf("%6.1f    %.5f\n", λ, emission(sif, 440.0, λ))
-end
+lay = layer_optics(OceanLayer(0.0, 5.0, AbstractOceanConstituent{Float64}[water, pig];
+                              inelastic = AbstractOceanInelasticProcess{Float64}[antenna]),
+                   collect(400.0:5.0:750.0))
+E₀  = ones(n_wavelengths(lay))
+par = absorbed_par(lay, E₀)                  # µmol photons m⁻² s⁻¹ per absorption component
+[(c.label, c.part, round(p; sigdigits = 4)) for (c, p) in zip(lay.absorbers, par)]
+```
+
+```@example ex
+λ_em = collect(640.0:1.0:850.0)
+P    = inelastic_emission(lay, 1, E₀, λ_em)  # W m⁻² nm⁻¹ emitted by the layer
+λ_em[argmax(P)], maximum(P)
 ```
 
 Water Raman at 440-nm excitation peaks around 517 nm (the `3400 cm⁻¹`

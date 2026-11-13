@@ -47,11 +47,14 @@ fell_column
 layer_optics
 column_optics
 OceanLayerOptics
+AbsorptionComponent
 ScatteringComponent
+InelasticComponent
 OceanColumnOptics
 AbstractOceanBottom
 BlackBottom
 LambertianBottom
+TabulatedLambertianBottom
 bottom_albedo
 interface_depths
 wavelengths

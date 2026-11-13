@@ -56,6 +56,13 @@ currently uses Morel & Maritorena (2001) irrespective of `M`, and the
 phase function defaults to `FournierForandPhase` with backscatter
 fraction 0.01 (typical open-ocean living phytoplankton).
 
+An optional pigment partition ([`ProspectPigments`](@ref),
+[`Bidigare1990Pigments`](@ref)) attributes the absorption to pigment
+groups: [`absorption_parts`](@ref) then names the groups,
+[`layer_optics`](@ref) reports one absorption component per group, and
+[`chlorophyll_fluorescence`](@ref) can weight each group by its energy
+transfer to chlorophyll. The total absorption is unchanged.
+
 # Fields
 $(TYPEDFIELDS)
 
@@ -67,30 +74,48 @@ phyto = Phytoplankton{Float64, Bricaud1998}(Chl = 0.5)
 
 # Custom backscatter fraction (coastal, larger cells)
 phyto = Phytoplankton{Float64, Bricaud1998}(Chl = 2.0, B = 0.015)
+
+# Absorption attributed to chlorophyll and carotenoids
+phyto = Phytoplankton(Chl = 0.5, pigments = ProspectPigments(carotenoid_ratio = 0.3))
+absorption_parts(phyto)           # (:chlorophyll, :carotenoids, :unassigned)
 ```
 """
-struct Phytoplankton{FT, M<:AbstractPhytoplanktonModel,
-                        P<:AbstractOceanPhaseFunction{FT}} <: AbstractAbsorbingScatterer{FT}
+struct Phytoplankton{FT, M<:AbstractPhytoplanktonModel, P<:AbstractOceanPhaseFunction{FT},
+                     G<:Union{Nothing, AbstractPigmentPartition}} <: AbstractAbsorbingScatterer{FT}
     "Parameterization-model tag (e.g. `Bricaud1998()`)"
     model::M
     "Chlorophyll-a concentration `[mg/m³]`"
     Chl::FT
     "Particulate-scattering phase function"
     phase::P
+    "Pigment partition of the absorption, or `nothing` (a single part, `:total`)"
+    pigments::G
 end
 
 """
-    Phytoplankton{FT, M}(; Chl, B=0.01)
+    Phytoplankton{FT, M}(; Chl, B = 0.01, pigments = nothing)
 
 Construct a `Phytoplankton` instance with Fournier-Forand phase function
-parameterized by backscatter fraction `B`.
+parameterized by backscatter fraction `B`, and optionally a pigment
+partition of its absorption.
 """
-function Phytoplankton{FT, M}(; Chl, B = FT(0.01)) where {FT<:AbstractFloat, M<:AbstractPhytoplanktonModel}
+function Phytoplankton{FT, M}(; Chl, B = FT(0.01),
+                              pigments::Union{Nothing, AbstractPigmentPartition} = nothing
+                              ) where {FT<:AbstractFloat, M<:AbstractPhytoplanktonModel}
     Chl ≥ zero(Chl) ||
         throw(ArgumentError("Phytoplankton: Chl must be non-negative, got $Chl"))
     phase = FournierForandPhase{FT}(backscatter_fraction = FT(B))
-    return Phytoplankton{FT, M, typeof(phase)}(M(), FT(Chl), phase)
+    pg    = _partition_precision(FT, pigments)
+    return Phytoplankton{FT, M, typeof(phase), typeof(pg)}(M(), FT(Chl), phase, pg)
 end
+
+# Floating-point partitions take the phytoplankton's precision, so that the
+# absorption parts have the type of the total; dual numbers (AD) pass through.
+_partition_precision(::Type{FT}, p) where {FT} = p
+_partition_precision(::Type{FT}, p::ProspectPigments{<:AbstractFloat}) where {FT} =
+    ProspectPigments{FT}(p.carotenoid_ratio)
+_partition_precision(::Type{FT}, p::Bidigare1990Pigments{<:AbstractFloat}) where {FT} =
+    Bidigare1990Pigments{FT}(_concentrations(p)...)
 
 Phytoplankton{FT}(; kwargs...) where {FT<:AbstractFloat} =
     Phytoplankton{FT, Bricaud1998}(; kwargs...)
@@ -122,6 +147,13 @@ function absorption(p::Phytoplankton{FT, Gordon1992}, λ::Real) where {FT}
 end
 
 absorption(p::Phytoplankton, λ::AbstractVector) = [absorption(p, λi) for λi in λ]
+
+absorption_parts(p::Phytoplankton) = p.pigments === nothing ? (:total,) : pigment_parts(p.pigments)
+
+function absorption_by_part(p::Phytoplankton, λ::Real)
+    a = absorption(p, λ)
+    return p.pigments === nothing ? (a,) : map(f -> f * a, pigment_fractions(p.pigments, λ))
+end
 
 # -----------------------------------------------------------------------------
 # Scattering — Morel & Maritorena (2001) Case-1 particulate form
@@ -156,5 +188,6 @@ backscattering(p::Phytoplankton, λ::AbstractVector) = [backscattering(p, λi) f
 
 function Base.show(io::IO, p::Phytoplankton{FT, M}) where {FT, M}
     print(io, "Phytoplankton{$FT}(", nameof(M), ", Chl=$(p.Chl) mg/m³, ",
-              "B=", backscatter_fraction(p.phase), ")")
+              "B=", backscatter_fraction(p.phase),
+              p.pigments === nothing ? "" : ", $(p.pigments)", ")")
 end

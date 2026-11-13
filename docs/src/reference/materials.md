@@ -40,6 +40,20 @@ Bricaud1998
 Gordon1992
 ```
 
+## Pigment partitions
+
+```@docs
+AbstractPigmentPartition
+ProspectPigments
+Bidigare1990Pigments
+pigment_parts
+pigment_class
+pigment_fractions
+absorption_parts
+absorption_by_part
+absorption_part
+```
+
 ## Non-algal particles
 
 ```@docs

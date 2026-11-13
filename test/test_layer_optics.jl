@@ -10,13 +10,17 @@
         o = layer_optics(layer, λ; ℓ_max = 32)
         @test o isa OceanLayerOptics{Float64} && !is_polarized(o)
         @test thickness(o) == 5 && o.depth_top == 2 && n_moments(o) == 33
-        @test [c.label for c in o.components] == ["PureWater", "Phytoplankton"]
+        @test [c.label for c in o.scatterers] == ["PureWater", "Phytoplankton"]
+        @test [(c.label, c.part) for c in o.absorbers] ==
+              [("PureWater", :total), ("CDOM", :total), ("Phytoplankton", :total)]
+        @test isempty(o.inelastic)
         for (i, λi) in enumerate(λ)
             a = absorption(water, λi) + absorption(cdom, λi) + absorption(phyto, λi)
             bw, bp = scattering(water, λi), scattering(phyto, λi)
             @test absorption_optical_depth(o)[i] ≈ 5a rtol = 1e-12
-            @test o.components[1].τ[i] ≈ 5bw rtol = 1e-12
-            @test o.components[2].τ[i] ≈ 5bp rtol = 1e-12
+            @test o.absorbers[2].τ[i] ≈ 5absorption(cdom, λi) rtol = 1e-12
+            @test o.scatterers[1].τ[i] ≈ 5bw rtol = 1e-12
+            @test o.scatterers[2].τ[i] ≈ 5bp rtol = 1e-12
             @test optical_depth(o)[i] ≈ 5(a + bw + bp) rtol = 1e-12
             @test single_scattering_albedo(o)[i] ≈ (bw + bp) / (a + bw + bp) rtol = 1e-12
             # Mixed expansion: scattering-weighted, so β₁ comes from the particles only.
@@ -28,8 +32,8 @@
                                                (bw + bp) rtol = 1e-12
         end
         # Wavelength-independent phase functions are expanded once.
-        @test all(!is_wavelength_dependent(c) for c in o.components)
-        @test all(c.polarization == :scalar for c in o.components)
+        @test all(!is_wavelength_dependent(c) for c in o.scatterers)
+        @test all(c.polarization == :scalar for c in o.scatterers)
     end
 
     @testset "Polarization policy and labels" begin
@@ -40,10 +44,10 @@
         o = layer_optics(layer, λ; ℓ_max = 8, polarized = true,
                          scalar_phase_approximation = :depolarizing)
         @test is_polarized(o)
-        @test [c.polarization for c in o.components] == [:full, :depolarizing]
+        @test [c.polarization for c in o.scatterers] == [:full, :depolarizing]
         # Particles contribute only to β: the mixed α₂ is the water share of 3.
         for i in eachindex(λ)
-            w = o.components[1].τ[i] / scattering_optical_depth(o)[i]
+            w = o.scatterers[1].τ[i] / scattering_optical_depth(o)[i]
             g = greek_expansion(o, i)
             @test g.α[3] ≈ 3w rtol = 1e-12
             @test g.γ[3] ≈ sqrt(1.5) * w rtol = 1e-12
@@ -54,7 +58,7 @@
         # A pure-water layer needs no approximation.
         ow = layer_optics(OceanLayer(0.0, 1.0, AbstractOceanConstituent{Float64}[water]), λ;
                           ℓ_max = 4, polarized = true)
-        @test only(ow.components).polarization == :full
+        @test only(ow.scatterers).polarization == :full
     end
 
     @testset "Zero scattering and empty layers" begin
@@ -67,7 +71,7 @@
         @test g.β == [1.0, 0, 0, 0, 0] && all(iszero, (g.α, g.γ, g.δ, g.ϵ, g.ζ))
         @test greek_expansion(o, 2).α[3] ≈ 3
         e = layer_optics(OceanLayer(0.0, 1.0, AbstractOceanConstituent{Float64}[]), [500.0]; ℓ_max = 2)
-        @test isempty(e.components) && optical_depth(e) == [0.0]
+        @test isempty(e.scatterers) && isempty(e.absorbers) && optical_depth(e) == [0.0]
         @test greek_expansion(e, 1).β == [1.0, 0.0, 0.0]
     end
 
@@ -95,7 +99,7 @@
         s  = TabulatedScatterer(λ2, [0.1, 0.1], pf)
         o  = layer_optics(OceanLayer(0.0, 1.0, AbstractOceanConstituent{Float64}[s]), λ2;
                           ℓ_max = 4, polarized = true)
-        c  = only(o.components)
+        c  = only(o.scatterers)
         @test is_wavelength_dependent(c) && length(c.greek) == 2 && c.phase_index == [1, 2]
         @test greek_expansion(c, 1).γ[3] ≈ sqrt(1.5)
         @test greek_expansion(c, 2).γ[3] < sqrt(1.5)
@@ -108,7 +112,7 @@
         sf  = TabulatedScatterer(λf, fill(0.1, 2000), pn)
         t   = @elapsed of = layer_optics(OceanLayer(0.0, 1.0, AbstractOceanConstituent{Float64}[sf]), λf;
                                          ℓ_max = 64, polarized = true)
-        cf  = only(of.components)
+        cf  = only(of.scatterers)
         @test length(cf.greek) == 2 && length(cf.phase_index) == 2000
         @test greek_expansion(cf, 1) === cf.greek[1] && greek_expansion(cf, 2000) === cf.greek[2]
         @test cf.phase_index[findfirst(>(550.0), λf)] == 2
@@ -143,12 +147,19 @@
         @test_throws DimensionMismatch sc(greek = [g, g], B = [0.5, 0.5], index = [1, 2, 1])
         @test_throws ArgumentError sc(greek = [g, g], B = [0.5, 0.5], index = [1, 3])
         @test is_wavelength_dependent(sc(greek = [g, g], B = [0.5, 0.5], index = [2, 1]))
-        lay(; λ = [450.0, 550.0], top = 0.0, bot = 1.0, τa = [0.1, 0.1], comps = [sc()], n = 3, pol = false) =
-            OceanLayerOptics{Float64}(λ, top, bot, τa, comps, n, pol)
+        ac(τ = [0.1, 0.1]) = AbsorptionComponent("a", :total, τ)
+        @test_throws ArgumentError ac([-0.1, 0.1])
+        lay(; λ = [450.0, 550.0], top = 0.0, bot = 1.0, abs = [ac()], comps = [sc()],
+            inel = InelasticComponent{Float64}[], n = 3, pol = false) =
+            OceanLayerOptics{Float64}(λ, top, bot, abs, comps, inel, n, pol)
         @test lay() isa OceanLayerOptics
         @test_throws ArgumentError lay(λ = [450.0, 450.0])
         @test_throws ArgumentError lay(top = 1.0)
-        @test_throws DimensionMismatch lay(τa = [0.1])
+        @test_throws DimensionMismatch lay(abs = [ac([0.1])])
+        raman = WaterRaman{Float64}()
+        @test_throws ArgumentError lay(inel = [InelasticComponent{Float64}("WaterRaman", raman, [2], [1.0])])
+        @test_throws DimensionMismatch InelasticComponent{Float64}("WaterRaman", raman, [1], Float64[])
+        @test_throws ArgumentError InelasticComponent{Float64}("WaterRaman", raman, [1], [1.5])
         @test_throws ArgumentError lay(n = 4)
         @test_throws ArgumentError lay(pol = true)
         @test_throws DimensionMismatch lay(comps = [sc(τ = [0.1])])
@@ -165,8 +176,8 @@
         @test [l.depth_top for l in col] == [0.0, 10.0, 20.0]
         @test interface_depths(col) == [0.0, 10.0, 20.0, 30.0]
         # Equal phase functions share one phase_id and the same expansion objects.
-        @test allequal(only(l.components).phase_id for l in col)
-        @test all(only(l.components).greek[1] === only(col[1].components).greek[1] for l in col)
+        @test allequal(only(l.scatterers).phase_id for l in col)
+        @test all(only(l.scatterers).greek[1] === only(col[1].scatterers).greek[1] for l in col)
         colQ = column_optics(column, λ2; refractive_index = QuanFry1995(temperature = 20, salinity = 35),
                              bottom = LambertianBottom([0.1, 0.2]), ℓ_max = 8)
         @test colQ.refractive_index ≈ refractive_index(QuanFry1995(temperature = 20, salinity = 35), λ2)
@@ -186,9 +197,13 @@
         @test_throws ArgumentError OceanColumnOptics([l1, col.layers[3]], [1.34, 1.34], BlackBottom())
     end
 
-    @testset "Fluorophores are not elastic optics" begin
+    @testset "Inelastic processes are carried, not mixed" begin
+        raman = WaterRaman{Float64}()
         layer = OceanLayer(0.0, 5.0, AbstractOceanConstituent{Float64}[cdom];
-                           fluorophores = AbstractOceanInelasticProcess{Float64}[WaterRaman{Float64}()])
-        @test isempty(layer_optics(layer, [500.0]; ℓ_max = 4).components)
+                           inelastic = AbstractOceanInelasticProcess{Float64}[raman])
+        o = layer_optics(layer, [500.0]; ℓ_max = 4)
+        @test isempty(o.scatterers) && optical_depth(o) ≈ [5absorption(cdom, 500.0)]
+        c = only(o.inelastic)
+        @test c.process === raman && c.label == "WaterRaman" && isempty(c.excitation)
     end
 end

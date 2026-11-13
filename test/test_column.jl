@@ -98,13 +98,13 @@
         @test col25[end].depth_bottom == 25.0
     end
 
-    @testset "Column carries fluorophores through layers" begin
+    @testset "Column carries inelastic processes through layers" begin
         phyto = Phytoplankton{Float64, Bricaud1998}(Chl = 0.5)
-        sif   = chlorophyll_fluorescence(phyto)
+        sif   = chlorophyll_fluorescence(phyto; quantum_yield = 0.02)
         col   = uniform_column(AbstractOceanConstituent{Float64}[phyto];
                                n_layers = 5, depth = 25.0,
-                               fluorophores = AbstractOceanInelasticProcess{Float64}[sif])
-        @test all(length(layer.fluorophores) == 1 for layer in col)
-        @test all(layer.fluorophores[1] === sif for layer in col)
+                               inelastic = AbstractOceanInelasticProcess{Float64}[sif])
+        @test all(length(layer.inelastic) == 1 for layer in col)
+        @test all(layer.inelastic[1] === sif for layer in col)
     end
 end

@@ -24,11 +24,19 @@ per wavelength, and the bottom ([`BlackBottom`](@ref) or
 |---|---|
 | `λ` | wavelengths `[nm]`, strictly increasing or decreasing |
 | `depth_top`, `depth_bottom`, [`thickness`](@ref) | depths below the surface `[m]` |
-| `τ_abs`, [`absorption_optical_depth`](@ref) | absorption optical depth of all absorbers |
-| `components` | one [`ScatteringComponent`](@ref) per scattering constituent |
-| [`optical_depth`](@ref), [`scattering_optical_depth`](@ref), [`single_scattering_albedo`](@ref) | derived totals |
+| `absorbers` | one [`AbsorptionComponent`](@ref) per absorber, or per absorption part (pigment group) |
+| `scatterers` | one [`ScatteringComponent`](@ref) per scattering constituent |
+| `inelastic` | one [`InelasticComponent`](@ref) per inelastic process, linked to the absorption that excites it |
+| [`absorption_optical_depth`](@ref), [`optical_depth`](@ref), [`scattering_optical_depth`](@ref), [`single_scattering_albedo`](@ref) | derived totals |
 | [`greek_expansion`](@ref)`(o, iλ)` | mixed expansion at a wavelength (scattering-weighted) |
 | [`backscatter_fraction`](@ref)`(o)` | scattering-weighted backscatter fraction of the phase functions |
+
+An [`AbsorptionComponent`](@ref) carries a `label` (as for scattering
+components), a `part` (`:total`, or a pigment group such as
+`:chlorophyll`; see [Pigments and fluorescence excitation](@ref)) and its
+absorption optical depth `τ = a Δz` per wavelength. The elastic solve
+needs only their sum; the split lets the solver report the light absorbed
+by each constituent and pigment group.
 
 A [`ScatteringComponent`](@ref) carries a `label` (constituent type, or
 the `source` of tabulated data), its scattering optical depth `τ` per
@@ -53,7 +61,7 @@ operators can be reused. Layers are ordered from the surface down;
 [`interface_depths`](@ref)`(col)` gives the layer boundaries.
 
 **Derivatives.** Every optical depth is linear in its constituent's
-concentration (`τ_c = b_c Δz`, `τ_abs = Σ a_c Δz`) and the layer mixture is
+concentration (`τ = b_c Δz`, `τ = a_c Δz`) and the layer mixture is
 linear in the component optical depths, so derivatives with respect to
 component amounts follow directly from the component split; the
 assembly itself is evaluated in floating point (`FT`).
@@ -69,7 +77,9 @@ represented by a bottom layer thick enough for the bottom not to matter
 | Wavelength `λ` | nm | As tabulated by the source data; no air/vacuum conversion is applied |
 | `a`, `b`, `b_b` | m⁻¹ | Volumetric coefficients, not spectral densities |
 | Depth, thickness | m | Positive downward from the surface |
-| `τ_abs`, component `τ` | — | `a Δz`, `b Δz` |
+| Component `τ` | — | `a Δz` (absorption), `b Δz` (scattering) |
+| Scalar irradiance `E₀` | W m⁻² nm⁻¹ | Supplied by the solver; total intensity over all directions |
+| Absorbed photons, absorbed PAR | µmol photons m⁻² s⁻¹ (nm⁻¹) | Photon energy `hc/λ` |
 | Refractive index | — | Real, seawater relative to air |
 | Redistribution `emission(p, λ′, λ)` | nm⁻¹ | Photon density per nm of emission wavelength |
 
@@ -179,9 +189,17 @@ paper's stated asymmetry parameters (0.95, 0.97) and backscatter ratios
   `QuanFry1995(; temperature, salinity)` — Quan & Fry (1995), relative to
   air, fitted to 400–700 nm, 0–30 °C, 0–35 PSU; outside that domain it
   throws unless `extrapolate = true`.
-* `bottom = BlackBottom()` or `LambertianBottom(albedo)` (one value or one
-  per wavelength). The solver applies the bottom; OceanOptics only
-  describes it.
+* `bottom = BlackBottom()` (deep water), `LambertianBottom(albedo)` (one
+  value or one per wavelength) or
+  [`TabulatedLambertianBottom`](@ref)`(λ, albedo; source)` — an albedo
+  spectrum on its own grid (e.g. measured sand or seagrass reflectance),
+  interpolated onto `λ`. The column always carries a `BlackBottom` or a
+  `LambertianBottom` with [`bottom_albedo`](@ref)`(col)` per wavelength.
+
+The solver applies the floor at [`bottom_depth`](@ref)`(col)`, below the
+last layer: a Lambertian floor reflects intensity isotropically and
+depolarizes (only the azimuthal mode `m = 0`, only `I`). OceanOptics only
+describes it.
 
 ## Validity and provenance
 
@@ -192,10 +210,72 @@ provenance headers. The default water absorption, [`IOCCG2018`](@ref),
 covers 350–2500 nm; [`SmithBaker1981`](@ref) reaches down to 200 nm but
 is several times too high below ~420 nm.
 
+## Pigments and fluorescence excitation
+
+Phytoplankton can attribute its absorption to pigment groups with a
+partition ([`ProspectPigments`](@ref): chlorophyll and carotenoids with
+the PROSPECT-D leaf spectra, by analogy with land; or
+[`Bidigare1990Pigments`](@ref): chlorophylls a, b, c, photosynthetic and
+photoprotective carotenoids and phycoerythrins). The total stays that of
+the phytoplankton model; each group becomes an absorption component, and
+absorption that the spectra cannot attribute (e.g. in the UV) goes to
+`:unassigned`.
+
+A fluorescence process is excited through [`ExcitationPathway`](@ref)s,
+each an absorber (or absorption part) with an energy-transfer efficiency
+`η ∈ [0, 1]`:
+
+`excitation_absorption(p, λ′) = φ · Σ_k η_k · a_k(λ′)`.
+
+Chlorophyll has `η = 1`; carotenoids acting as antenna pass on `η ≤ 1`;
+photoprotective absorption and quenching have `η = 0`.
+[`chlorophyll_fluorescence`](@ref) builds the pathways from the
+partition: `carotenoid_transfer = 0` is chlorophyll-only excitation (as
+in Fluspect), `1` a lossless carotenoid antenna, values between the
+share passed on; `transfer` sets groups individually. Its default
+emission is the chloroplast-level spectrum of Fluspect
+([`chloroplast_emission`](@ref)); the quantum yield is always explicit.
+
+In [`layer_optics`](@ref), each process becomes an
+[`InelasticComponent`](@ref) whose `excitation` indexes the layer's
+`absorbers` and whose `efficiency` holds the `η`s, so that
+`quantum_yield · Σ_k efficiency[k] · absorbers[excitation[k]].τ / Δz`
+equals `excitation_absorption(process, λ)` on the layer grid. An absorber
+that excites fluorescence must be a constituent of the layer: its light
+absorption has to attenuate the field it is excited by.
+
+## Light absorbed per layer
+
+Given the solver's layer-mean spectral scalar irradiance
+`Ē₀(λ) = (1/Δz) ∫ E₀(z, λ) dz` `[W m⁻² nm⁻¹]` for a layer (total intensity
+over all directions, direct and diffuse, integrated through the layer —
+not interface values), every component absorbs `A_c(λ) = τ_c(λ) Ē₀(λ)`:
+
+* [`absorbed_power`](@ref)`(o, Ē₀)` — `A_c(λ)` `[W m⁻² nm⁻¹]` per
+  absorption component;
+* [`absorbed_photons`](@ref)`(o, Ē₀)` — the same in µmol photons
+  m⁻² s⁻¹ nm⁻¹;
+* [`absorbed_par`](@ref)`(o, Ē₀; range = (400, 700))` — absorbed PAR per
+  component `[µmol photons m⁻² s⁻¹]`, e.g. by chlorophyll, per layer;
+* [`excitation_optical_depth`](@ref)`(o, j)` — `τᴵ = aᴵ Δz` of the
+  layer's `j`-th inelastic process on the layer grid, from the stored
+  components;
+* [`absorber_index`](@ref)`(o, label, part)` — the row of a component,
+  e.g. `absorber_index(o, "Phytoplankton", :chlorophyll)`;
+* [`inelastic_emission`](@ref)`(o, j, Ē₀, λ_em)` — spectral power
+  `[W m⁻² nm⁻¹]` emitted in all directions through the layer's `j`-th
+  inelastic process. For fluorescence, emitted photons equal the quantum
+  yield times the photons delivered by the excitation pathways.
+
+Over a column, in the elastic case, `E_d(0⁻) − E_u(0⁻) = Σ_layers Σ_c A_c +`
+the floor's absorption `(1 − albedo) E_d(floor)`: a closure test for the
+solver.
+
 ## Inelastic source kernels
 
-Inelastic sources are not part of `layer_optics`; they are kernels the
-solver evaluates against its own internal radiation field:
+Each inelastic process is carried by its layer's
+[`InelasticComponent`](@ref); its kernels are evaluated by the solver
+against its own internal radiation field:
 
 * [`excitation_absorption`](@ref)`(p, λ′)` — photon conversion rate
   `[1/m]`; includes the quantum yield for fluorescence, is the Raman
@@ -219,20 +299,26 @@ solver's convention and must match the reference it is compared with.
 
 * **Solver output:** [`column_optics`](@ref), [`OceanColumnOptics`](@ref),
   [`layer_optics`](@ref), [`OceanLayerOptics`](@ref),
-  [`ScatteringComponent`](@ref), [`GreekCoefficients`](@ref) and the
+  [`AbsorptionComponent`](@ref), [`ScatteringComponent`](@ref),
+  [`InelasticComponent`](@ref), [`GreekCoefficients`](@ref) and the
   accessors above; [`BlackBottom`](@ref), [`LambertianBottom`](@ref),
-  [`bottom_albedo`](@ref).
+  [`TabulatedLambertianBottom`](@ref), [`bottom_albedo`](@ref).
+* **Absorbed light:** [`absorbed_power`](@ref), [`absorbed_photons`](@ref),
+  [`absorbed_par`](@ref), [`inelastic_emission`](@ref),
+  [`excitation_optical_depth`](@ref), [`absorber_index`](@ref).
 * **Constituents:** [`AbstractOceanConstituent`](@ref) and its role
-  types; [`absorption`](@ref), [`scattering`](@ref),
+  types; [`absorption`](@ref), [`absorption_parts`](@ref),
+  [`absorption_by_part`](@ref), [`scattering`](@ref),
   [`backscattering`](@ref), [`scattering_phase`](@ref),
-  [`is_total_absorption`](@ref).
+  [`is_total_absorption`](@ref); pigment partitions
+  ([`AbstractPigmentPartition`](@ref)).
 * **Phase functions:** [`AbstractOceanPhaseFunction`](@ref),
   [`greek_expansion`](@ref), [`phase_function_moments`](@ref),
   [`is_polarizable`](@ref), [`is_wavelength_dependent`](@ref).
 * **Refractive index:** [`AbstractRefractiveIndexModel`](@ref),
   [`refractive_index`](@ref).
-* **Inelastic processes:** [`AbstractOceanInelasticProcess`](@ref) and the
-  kernels above.
+* **Inelastic processes:** [`AbstractOceanInelasticProcess`](@ref),
+  [`excitation_pathways`](@ref) and the kernels above.
 
 Exported names do not collide with vSmartMOM's exports, so both packages
 can be loaded together.

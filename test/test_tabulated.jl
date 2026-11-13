@@ -93,7 +93,7 @@
         o = layer_optics(OceanLayer(0.0, 100.0, AbstractOceanConstituent{Float64}[
                 TabulatedAbsorber(λ, cases[1].a_blk; total = true), water_scat]), λ;
                 ℓ_max = 8, polarized = true)
-        c = only(o.components)
+        c = only(o.scatterers)
         @test c.label == src && c.polarization == :full
         @test greek_expansion(c, 1).γ[3] ≈ sqrt(1.5) && greek_expansion(c, 1).δ[2] ≈ 1.5
         @test backscatter_fraction(o) ≈ fill(0.5, 4)
