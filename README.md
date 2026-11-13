@@ -51,6 +51,16 @@ be combined with separately modelled water or CDOM absorption.
 pkg> add OceanOptics
 ```
 
+Julia 1.10 or later.
+
+## New in 0.2.0
+
+- Water Raman is an energy conversion by default (no λ′/λ factor); its phase function follows Mobley et al. (1993) Eq. 9 with ρ = 0.17.
+- Every physical parameter is a field or keyword with a documented default ([parameter reference](https://RemoteSensingTools.github.io/OceanOptics.jl/stable/reference/parameters/)).
+- Derivatives with respect to model parameters (Chl, CDOM slope, temperature, salinity, Fournier-Forand B, …) by ForwardDiff, through `layer_optics` and `column_optics`.
+- Pigment partitions hold their edge shares below 400 nm; photoprotective carotenoids no longer excite chlorophyll fluorescence by default.
+- Several breaking changes (`WaterRaman`, `Phytoplankton.scattering_model`, `Gordon1992` removed): see the CHANGELOG and the "Migrating from 0.1" section of the Consumer API page.
+
 ## Quick start
 
 ```julia
@@ -86,10 +96,31 @@ E₀ = ones(n_wavelengths(o))   # stand-in for the solver's layer-mean scalar ir
 absorbed_par(o, E₀)           # µmol photons m⁻² s⁻¹ per absorption component
 ```
 
+## Precision and devices
+
+The results have the element type of the layer or column (`Float64` above);
+pass another as the first argument. They are host arrays, and `Adapt.adapt`
+moves their numeric arrays to a device without changing the element type:
+
+```julia
+col32 = column_optics(Float32, column, collect(400.0:5.0:700.0);
+                      refractive_index = FixedRefractiveIndex(1.34),
+                      bottom = BlackBottom())
+# using Adapt, CUDA; adapt(CuArray, col32)
+c = col32[1].scatterers[1]
+phase_id(c, 1) == phase_id(greek_expansion(c, 1))   # true
+```
+
+`phase_id` is a content key of an expansion (a 64-bit hash of its element
+type and coefficients): equal keys mean equal coefficients in any layer,
+column or session, so a solver can build phase operators once per key.
+
 ## Documentation
 
 The [documentation](https://RemoteSensingTools.github.io/OceanOptics.jl/)
 covers the consumer contract (units, conventions, validation), the
+[parameter reference](https://RemoteSensingTools.github.io/OceanOptics.jl/stable/reference/parameters/)
+(every physical parameter with its default, unit and source), the
 vSmartMOM mapping with a tested adapter sketch, a comparison with the
 HydroLight IOP database of Loisel et al. (2023), and interactive figures.
 
@@ -118,11 +149,11 @@ DOI, URL, retrieval date, unit changes):
 | `pope_fry_1997.csv` | omlc.org | Pure-water absorption, 380–727.5 nm |
 | `smith_baker_1981.csv` | omlc.org | Clearest natural waters, 200–800 nm |
 | `rottgers_2014_temperature.csv` | Röttgers et al. 2014, figshare (CC BY 4.0) | Temperature coefficient Ψ_T, 550–2500 nm |
-| `bricaud_1998_A.csv`, `bricaud_1998_E.csv` | Ocean Optics Web Book (CC-BY) | Phytoplankton `A(λ)`, `E(λ)`, 300–1000 nm |
+| `bricaud_1998_A.csv`, `bricaud_1998_E.csv` | Ocean Optics Web Book (CC-BY) | Particulate absorption `a_p = A(λ)·Chl^E(λ)` (phytoplankton plus detritus; HydroLight Case-1 tables), 300–1000 nm |
 | `petzold_sdh.csv` | Ocean Optics Web Book (CC-BY) | Petzold San Diego Harbor VSF, 0.1°–180° |
 | `bidigare_1990_pigments.csv` | Ocean Optics Web Book (CC-BY) | In vivo specific absorption of algal pigment groups, 400–750 nm (Bidigare et al. 1990) |
-| `fluspect_chloroplast_emission.csv` | SCOPE `Optipar2017_ProspectD` (GPL-3.0; also in CliMA Land, Apache-2.0) | Chloroplast-level fluorescence emission (combined, PSI, PSII), 640–851 nm |
-| `prospect_d_pigment_absorption.csv` | as above | PROSPECT-D in vivo chlorophyll and carotenoid absorption, 400–800 nm |
+| `fluspect_chloroplast_emission.csv` | SCOPE parameter file `Optipar2017_ProspectD` (used there by Fluspect, Vilfan et al. 2016, 2018; original measurements not traced; data only, no SCOPE code) | Chloroplast-level fluorescence emission (combined, PSI, PSII), 640–851 nm |
+| `prospect_d_pigment_absorption.csv` | same SCOPE parameter file, attributed there to PROSPECT-D (Féret et al. 2017); not compared with the authors' own distribution; data only | PROSPECT-D in vivo chlorophyll and carotenoid absorption, 400–800 nm |
 | `reference/loisel2023_hydrolight_iops.csv` | Loisel et al. 2023 (CC0) | HydroLight input IOPs: pure seawater and three scenarios |
 
 Cite the original papers in derived work.

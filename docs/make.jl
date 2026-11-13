@@ -20,6 +20,9 @@ makedocs(
         size_threshold         = 400 * 2^10,
         size_threshold_warn    = 320 * 2^10,
         example_size_threshold = 96 * 2^10,
+        # The search index includes the embedded chart tables (522 KiB with the
+        # parameters page; Documenter warns from 500 KiB and fails at 1 MiB).
+        search_size_threshold_warn = 640 * 2^10,
     ),
     pages    = [
         "Home"                 => "index.md",
@@ -33,10 +36,11 @@ makedocs(
             "Materials"        => "reference/materials.md",
             "Phase functions"  => "reference/phases.md",
             "Inelastic"        => "reference/inelastic.md",
+            "Parameters"       => "reference/parameters.md",
             "Data loading"     => "reference/io.md",
         ],
     ],
-    warnonly   = [:missing_docs, :cross_references],
+    doctest    = true,
     checkdocs  = :exports,
 )
 

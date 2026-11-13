@@ -56,7 +56,7 @@
                                                   depth = -1.0)
     end
 
-    @testset "fell_column matches DESIGN §4.5 grid" begin
+    @testset "fell_column matches the layer grid of Fell (1997)" begin
         cdom = CDOM{Float64}(a_ref = 0.03)
         col  = fell_column(AbstractOceanConstituent{Float64}[cdom]; depth = 60.0)
 

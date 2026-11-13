@@ -16,6 +16,15 @@ numeric_backscatter(pf) =
         # The generic θ quadrature reproduces the closed form.
         @test numeric_moments(pf0, 8) ≈ β atol = 1e-12
 
+        # Scalar phase function and moments with depolarization: β₂ = Δ/2,
+        # Δ = (1 − ρ)/(1 + ρ/2), so p(μ) = 1 + (Δ/4)(3μ² − 1). At ρ = 0.039 and
+        # μ = 0.3, Δ = 0.961/1.0195 and p = 1 − 0.1825·Δ = 0.827972.
+        pfρ = RayleighWaterPhase{Float64}(depolarization = 0.039)
+        @test phase_function_moments(pfρ, 4) ≈ [1, 0, 0.5 * 0.961 / 1.0195, 0, 0] rtol = 1e-14
+        @test phase_function_value(pfρ, 0.3) ≈ 1 - 0.1825 * 0.961 / 1.0195 rtol = 1e-14
+        @test phase_function_value(pfρ, 0.3) ≈ 0.827972 rtol = 1e-6
+        @test numeric_moments(pfρ, 4) ≈ phase_function_moments(pfρ, 4) atol = 1e-12
+
         for ρ in (0.0, 0.039, 0.09)
             pf    = RayleighWaterPhase{Float64}(depolarization = ρ)
             dpl_p = (1 - ρ) / (1 + ρ / 2)
@@ -56,6 +65,14 @@ numeric_backscatter(pf) =
         @test pf.n ≈ 1.10 atol = 1e-3
         @test pf.μ_j ≈ 3.5835 atol = 1e-3
         @test backscatter_fraction(FournierForandPhase{Float64}(n = 1.10, μ_j = 3.5835)) ≈ 0.0183 atol = 5e-5
+        # Away from that point the parameters still lie on the family line of
+        # Mobley, Sundman & Boss (2002), n = 1.01 + 0.1542 (μ − 3).
+        for B in (0.002, 0.005, 0.03, 0.05)
+            q = FournierForandPhase{Float64}(backscatter_fraction = B)
+            @test q.n ≈ 1.01 + 0.1542 * (q.μ_j - 3) rtol = 1e-12
+        end
+        @test FournierForandPhase{Float64}(backscatter_fraction = 0.005).μ_j <
+              FournierForandPhase{Float64}(backscatter_fraction = 0.03).μ_j
 
         # Exact normalization, checked by an independent adaptive integration
         # in θ (the forward peak is p ~ θ^(2|ν|-2)), no renormalization involved.

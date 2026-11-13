@@ -37,7 +37,8 @@ BricaudMorelPrieur1981
 Phytoplankton
 AbstractPhytoplanktonModel
 Bricaud1998
-Gordon1992
+AbstractParticleScatteringModel
+GordonMorel1983
 ```
 
 ## Pigment partitions
@@ -46,6 +47,9 @@ Gordon1992
 AbstractPigmentPartition
 ProspectPigments
 Bidigare1990Pigments
+AbstractOutOfRangeShares
+HoldEdgeShares
+UnassignedOutsideTable
 pigment_parts
 pigment_class
 pigment_fractions

@@ -76,8 +76,8 @@ end
 """
     excitation_pathways(p::AbstractOceanInelasticProcess) -> Tuple
 
-The [`ExcitationPathway`](@ref)s whose absorbed photons drive `p`; empty
-for processes not driven by absorption (water Raman).
+Return the [`ExcitationPathway`](@ref)s whose absorbed photons drive `p`; the tuple is
+empty for processes not driven by absorption (water Raman).
 """
 excitation_pathways(::AbstractOceanInelasticProcess) = ()
 
@@ -167,6 +167,13 @@ emission(p::IsotropicFluorescence, λ_prime::Real, λ::Real) =
 excitation_range(p::IsotropicFluorescence)    = p.excitation_range
 excitation_pathways(p::IsotropicFluorescence) = p.excitation
 is_isotropic(::IsotropicFluorescence)         = true
+conversion_units(::IsotropicFluorescence)     = PhotonConversion()
+"""
+    quantum_yield(p)
+
+Return the fluorescence quantum yield of process `p`: photons emitted per photon
+delivered to the fluorescing pigment.
+"""
 quantum_yield(p::IsotropicFluorescence)       = p.quantum_yield
 
 function Base.show(io::IO, p::IsotropicFluorescence{FT}) where {FT}
@@ -185,8 +192,10 @@ const _FLUSPECT_SOURCE   = "Fluspect Optipar2017_ProspectD (SCOPE; Vilfan et al.
 """
     chloroplast_emission([FT = Float64]; psi_share = nothing) -> TabulatedEmission
 
-Chlorophyll fluorescence emission at the photosystem (chloroplast) level,
-before any reabsorption, as used for leaves by Fluspect
+Return the chlorophyll fluorescence emission spectrum at the photosystem (chloroplast)
+level, before any reabsorption.
+
+The spectra are those used for leaves by Fluspect
 (`data/fluspect_chloroplast_emission.csv`, 640–851 nm):
 
 - `psi_share = nothing`: Fluspect's combined spectrum `phi` (the default
@@ -216,22 +225,30 @@ function chloroplast_emission(::Type{FT} = Float64;
     return TabulatedEmission(FT.(λ), FT.(shape); source)
 end
 
+"Limits of photosynthetically available radiation `[nm]`."
+const _PAR_RANGE_NM = (400.0, 700.0)
+
 """
     chlorophyll_fluorescence(phyto::Phytoplankton; quantum_yield,
                              carotenoid_transfer = nothing, phycobilin_transfer = 1,
-                             transfer = (;), emission = chloroplast_emission(FT),
+                             photoprotective_transfer = 0, transfer = (;), emission = chloroplast_emission(FT),
                              excitation_range = (400, 700)) -> IsotropicFluorescence
 
-Chlorophyll-a fluorescence of `phyto`, with one excitation pathway per
-absorption part of `phyto`:
+Build the chlorophyll-a fluorescence process of `phyto`, with one excitation pathway per
+absorption part of `phyto`.
 
 | part | default η |
 |:-----|:----------|
 | `:total` (no pigment partition) | 1: all phytoplankton absorption |
 | chlorophylls | 1 |
-| carotenoids | `carotenoid_transfer`: required when the partition has carotenoids |
-| phycobilins | `phycobilin_transfer` (phycobilisomes are a photosystem II antenna; the default 1 is a modelling choice) |
+| carotenoids (photosynthetic, or Prospect's lumped carotenoids) | `carotenoid_transfer`: required when the partition has them |
+| photoprotective carotenoids | `photoprotective_transfer` (0) |
+| phycobilins | `phycobilin_transfer` |
 | `:unassigned` | 0 |
+
+Phycobilisomes are a photosystem II antenna; the default `phycobilin_transfer = 1` is a
+modelling choice. Photoprotective carotenoids dissipate the energy they absorb instead of
+passing it on to chlorophyll, hence `photoprotective_transfer = 0`.
 
 `transfer` overrides η for named parts, e.g.
 `(photosynthetic_carotenoids = 0.8, photoprotective_carotenoids = 0.0)`
@@ -241,9 +258,19 @@ chlorophyll share of leaf absorption); `1` makes carotenoids a lossless
 antenna; values between give the share that is passed on rather than
 quenched.
 
+The pigment spectra of the partitions start at 400 nm. With the default
+[`HoldEdgeShares`](@ref) rule the shares at 400 nm apply below, so excitation in the UV
+(`excitation_range` starting below 400 nm) is attributed to the pigments as at 400 nm
+and nothing is dropped; a partition built with `outside = UnassignedOutsideTable()`
+has no excitation outside its table. Without a partition, all absorption within
+`excitation_range` excites. With
+[`Bricaud1998`](@ref) the absorption is the particulate absorption, detritus included,
+and all of it enters the excitation.
+
 `quantum_yield` (φ) has no default: in situ values range over roughly
-0.01–0.05 (Loisel et al. 2023, who use HydroLight's 0.02). The default emission is Fluspect's chloroplast-level spectrum
-([`chloroplast_emission`](@ref)), the default excitation window PAR.
+0.01–0.05 (Loisel et al. 2023, who use HydroLight's 0.02). The default emission is
+Fluspect's chloroplast-level spectrum ([`chloroplast_emission`](@ref)), the default
+excitation window PAR.
 `phyto` must also be a constituent of every layer the process is in; see
 [`layer_optics`](@ref).
 
@@ -258,9 +285,10 @@ function chlorophyll_fluorescence(phyto::Phytoplankton{FT};
         quantum_yield::Real,
         carotenoid_transfer::Union{Nothing, Real} = nothing,
         phycobilin_transfer::Real = 1,
+        photoprotective_transfer::Real = 0,
         transfer::NamedTuple = NamedTuple(),
         emission::AbstractSpectralRedistribution{FT} = chloroplast_emission(FT),
-        excitation_range::Tuple{<:Real, <:Real} = (FT(400), FT(700)),
+        excitation_range::Tuple{<:Real, <:Real} = _PAR_RANGE_NM,
 ) where {FT<:AbstractFloat}
     parts = absorption_parts(phyto)
     for k in keys(transfer)
@@ -278,6 +306,7 @@ function chlorophyll_fluorescence(phyto::Phytoplankton{FT};
         class = pigment_class(phyto.pigments, part)
         class === :chlorophyll && return 1
         class === :phycobilin  && return phycobilin_transfer
+        class === :photoprotective_carotenoid && return photoprotective_transfer
         class === :unassigned  && return 0
         carotenoid_transfer === nothing &&
             throw(ArgumentError("chlorophyll_fluorescence: choose the carotenoid energy " *
@@ -348,6 +377,7 @@ emission(p::CDOMFluorescence, λ_prime::Real, λ::Real) =
 excitation_range(p::CDOMFluorescence)    = p.excitation_range
 excitation_pathways(p::CDOMFluorescence) = (ExcitationPathway(p.cdom),)
 is_isotropic(::CDOMFluorescence)         = true
+conversion_units(::CDOMFluorescence)     = PhotonConversion()
 quantum_yield(p::CDOMFluorescence)       = p.quantum_yield
 
 function Base.show(io::IO, p::CDOMFluorescence{FT}) where {FT}

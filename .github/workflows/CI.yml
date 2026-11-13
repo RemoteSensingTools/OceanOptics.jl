@@ -1,3 +1,6 @@
+# Tests (Julia 1.10 and current stable; Linux and macOS) with coverage.
+# The documentation is built by Documentation.yml: on every pull request
+# (build only, no deployment) and on pushes to main and tags (build and deploy).
 name: CI
 
 on:
@@ -56,3 +59,4 @@ jobs:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
         continue-on-error: true
+

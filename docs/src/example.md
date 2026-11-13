@@ -2,8 +2,8 @@
 
 A realistic Case-1 water workflow: build the biogeochemistry, compute
 inherent optical properties over the visible, inspect the inelastic
-source kernels, and differentiate the elastic-path output w.r.t. the
-chlorophyll concentration.
+source kernels, and differentiate the absorption coefficient with
+respect to wavelength.
 
 All code blocks below are executed at documentation-build time by
 Documenter's `@example` machinery, so the numerical outputs in the
@@ -137,8 +137,9 @@ for λ in (660.0, 685.0, 700.0, 720.0, 739.0, 760.0, 800.0)
 end
 ```
 
-[`radiance_source_kernel`](@ref) adds the photon-energy ratio `λ'/λ`
-needed for an energy (radiance) source:
+Fluorescence converts photons ([`conversion_units`](@ref)), so the energy kernel
+[`radiance_source_kernel`](@ref) is the photon kernel times the photon-energy ratio
+`λ'/λ`:
 
 ```@example ex
 radiance_source_kernel(antenna, 440.0, 685.0) / inelastic_coefficient(antenna, 440.0, 685.0)
@@ -174,12 +175,24 @@ ram = WaterRaman{Float64}()
  emission(ram, 440.0, 517.0))
 ```
 
+The Raman coefficient is an energy conversion coefficient (Mobley et al. 1993): the
+energy kernel is `b_R f_R` without a photon-energy ratio, and the angular distribution
+is the Rayleigh-type phase function for the depolarization ratio of the band:
+
+```@example ex
+(conversion_units(ram),
+ radiance_source_kernel(ram, 440.0, 517.0) / (excitation_absorption(ram, 440.0) * emission(ram, 440.0, 517.0)),
+ phase_function_moments(raman_phase(ram), 2))
+```
+
 ## Forward-mode automatic differentiation
 
-Every forward function along the elastic path is AD-transparent via
-`ForwardDiff.Dual` inputs on the *wavelength* and most model
-parameters. Spectral sensitivity of the total absorption coefficient
-at 440 nm:
+The scalar functions `absorption`, `scattering` and `backscattering`
+accept a `ForwardDiff.Dual` *wavelength*; `phase_function_value` of the
+Fournier-Forand and Henyey-Greenstein phase functions accepts a dual `μ`;
+and `absorbed_power`, `absorbed_photons` and `absorbed_par` accept a dual
+irradiance. Spectral sensitivity of the total absorption coefficient at
+440 nm:
 
 ```@example ex
 using ForwardDiff
@@ -189,16 +202,61 @@ using ForwardDiff
 )
 ```
 
-Struct parameters themselves are typed `FT<:AbstractFloat`, so
-differentiating with respect to e.g. the CDOM slope goes through the
-analytic formula rather than the struct:
+Model parameters carry dual numbers too. The element type of a
+constituent is any `Real`; a constructor without an explicit type takes
+it from its parameters. The derivative of the CDOM absorption with
+respect to its spectral slope, against the closed form
+`∂a/∂S = −(λ − λ_ref) a`:
 
 ```@example ex
-a_ref, λ_ref = 0.03, 440.0
-g(S) = sum(a_ref * exp(-S * (λ - λ_ref)) for λ in (500.0, 600.0, 700.0))
-ForwardDiff.derivative(g, 0.014)
+(ForwardDiff.derivative(S -> absorption(CDOM(slope = S), 500.0), 0.014),
+ -(500.0 - 440.0) * absorption(CDOM(slope = 0.014), 500.0))
 ```
 
-See `test/test_ad.jl` for a wider set of worked AD examples, including
-CDOM, Pure Water, Morel / Zhang-Hu, Fournier-Forand and
-Henyey-Greenstein sensitivities.
+`layer_optics` and `column_optics` accept layers of dual element type and
+return optical depths that carry the derivative. Here the derivative of
+the absorption optical depth of a 5 m layer with respect to chlorophyll;
+every constituent of the layer is built at the element type of `Chl`:
+
+```@example ex
+λ_ad = [443.0, 551.0, 670.0]
+function absorption_depth(Chl)
+    FT    = typeof(Chl)
+    layer = OceanLayer(0.0, 5.0, AbstractOceanConstituent{FT}[
+                PureWater{FT}(), CDOM{FT}(), Phytoplankton{FT}(Chl = Chl)])
+    return absorption_optical_depth(layer_optics(layer, λ_ad; ℓ_max = 16))
+end
+∂τ_∂Chl = ForwardDiff.derivative(absorption_depth, 0.5)
+```
+
+A central difference gives the same numbers, and the logarithmic
+derivative of the phytoplankton part is the Bricaud exponent `E(λ) < 1`:
+the absorption is not linear in chlorophyll.
+
+```@example ex
+h = 1e-6
+(∂τ_∂Chl, (absorption_depth(0.5 + h) .- absorption_depth(0.5 - h)) ./ 2h)
+```
+
+The backscatter fraction of a Fournier-Forand phase function is carried
+through the Legendre expansion as well (the inversion to `(n, μ_j)` is
+linearized at its root, and the quadrature runs in dual numbers):
+
+```@example ex
+ForwardDiff.derivative(
+    B -> phase_function_moments(FournierForandPhase(backscatter_fraction = B), 4), 0.018)
+```
+
+Not differentiable with respect to parameters: the inelastic processes
+(`WaterRaman`, fluorescence) and their emission spectra, which are
+floating point only (their kernels accept dual wavelengths), and the
+measured phase tables (`PetzoldPhase`, `TabulatedMuellerPhase`). A
+constituent of fixed floating-point type cannot store a dual parameter:
+`CDOM{Float64}(slope = S)` with a dual `S` is a `MethodError`. The
+[consumer interface](consumer_api.md) lists every differentiable
+parameter.
+
+`test/test_ad.jl` holds the tested cases: each parameter derivative
+against a central difference or a closed form, for the scalar functions
+and through `layer_optics` and `column_optics`; wavelength,
+scattering-angle and irradiance derivatives; and the rejected cases.

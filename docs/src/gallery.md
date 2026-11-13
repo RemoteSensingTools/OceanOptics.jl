@@ -81,7 +81,7 @@ linechart([Series("Morel 1974", λ, b_mo),
 Comparison target: Morel & Maritorena (2001) Fig. 8 (total absorption
 and scattering of Case-1 water versus chlorophyll) and IOCCG Report 5
 §2.4. At 440 nm, higher Chl produces both higher total absorption
-(more `a_φ`) and higher particulate scattering `b_p`, with the
+(more particulate absorption `a_p`) and higher particulate scattering `b_p`, with the
 classical greening of `a(λ)` away from the pure-water blue minimum.
 
 ```@example gallery
@@ -101,7 +101,7 @@ end
 
 phytos = [Phytoplankton{Float64, Bricaud1998}(Chl = Chl) for Chl in Chls]
 linechart([Series("Chl = $Chl mg/m³", λ, total_a(p)) for (Chl, p) in zip(Chls, phytos)];
-          title = "Total absorption a = a_w + a_g + a_φ", xlabel = "wavelength λ [nm]",
+          title = "Total absorption a = a_w + a_g + a_p", xlabel = "wavelength λ [nm]",
           ylabel = "a(λ) [m⁻¹]", xname = "λ [nm]", ylog = true)
 ```
 
@@ -201,8 +201,10 @@ linechart([Series("Fluspect combined (default)", λ_emit, dens(chloroplast_emiss
 
 ## 7. Pigment partition of phytoplankton absorption
 
-Chlorophyll and carotenoid shares of `a_φ(λ)` at Chl = 0.5 mg m⁻³. The
-parts sum to the Bricaud (1998) total (grey); fluorescence counts the
+Chlorophyll and carotenoid shares of the absorption of `Phytoplankton` at
+Chl = 0.5 mg m⁻³. The parts sum to the Bricaud et al. (1998) particulate
+absorption `a_p(λ)` (grey), which includes the detritus of Case-1 water, so
+the pigment shares carry that detrital absorption too; fluorescence counts the
 carotenoid parts with their energy-transfer efficiency. First the land
 analogy, with the PROSPECT-D leaf spectra and a carotenoid:chlorophyll
 ratio of 0.3:
@@ -211,7 +213,7 @@ ratio of 0.3:
 λp = collect(400.0:2.0:720.0)
 part(p, name) = [absorption_part(p, name, λ) for λ in λp]
 pl = Phytoplankton(Chl = 0.5, pigments = ProspectPigments(carotenoid_ratio = 0.3))
-linechart([Series("total a_φ (Bricaud 1998)", λp, absorption(pl, λp); reference = true),
+linechart([Series("total a_p (Bricaud 1998)", λp, absorption(pl, λp); reference = true),
            Series("chlorophyll", λp, part(pl, :chlorophyll); slot = 0),
            Series("carotenoids", λp, part(pl, :carotenoids); slot = 1)];
           title = "Land analogy (PROSPECT-D), Chl = 0.5 mg m⁻³",
@@ -226,7 +228,7 @@ carotenoids 0.3, photoprotective carotenoids 0.1 mg m⁻³):
 ```@example gallery
 po = Phytoplankton(Chl = 0.5, pigments = Bidigare1990Pigments(chl_a = 0.5, chl_c = 0.1,
                                                               psc = 0.3, ppc = 0.1))
-linechart([Series("total a_φ (Bricaud 1998)", λp, absorption(po, λp); reference = true),
+linechart([Series("total a_p (Bricaud 1998)", λp, absorption(po, λp); reference = true),
            Series("chlorophyll a", λp, part(po, :chlorophyll_a); slot = 0),
            Series("photosynthetic carotenoids", λp, part(po, :photosynthetic_carotenoids); slot = 1),
            Series("photoprotective carotenoids", λp, part(po, :photoprotective_carotenoids);

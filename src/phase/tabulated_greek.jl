@@ -45,13 +45,13 @@ greek_expansion(pf, 8; polarized = true).γ[3]    # √(3/2)
 """
 struct TabulatedGreekPhase{FT} <: AbstractOceanPhaseFunction{FT}
     "The expansion"
-    greek::GreekCoefficients{FT}
+    greek::GreekCoefficients{FT, Vector{FT}}
     "Provenance: citation, table, and any transformation applied"
     source::String
 
-    function TabulatedGreekPhase{FT}(g::GreekCoefficients{FT}, source::String) where {FT<:AbstractFloat}
+    function TabulatedGreekPhase{FT}(g::GreekCoefficients{FT}, source::String) where {FT<:Real}
         B = backscatter_fraction(g)
-        0 ≤ B ≤ 1 ||
+        _within(B, 0, 1) ||
             throw(ArgumentError("TabulatedGreekPhase: the expansion has backscatter fraction " *
                                 "$B ∉ [0, 1] and is not a valid phase function (table " *
                                 "truncated before convergence?)"))

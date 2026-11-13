@@ -14,15 +14,15 @@ One vertically-homogeneous ocean layer.
 # Fields
 $(TYPEDFIELDS)
 """
-struct OceanLayer{FT}
+struct OceanLayer{FT<:Real}
     "Depth of layer top [m], 0 at surface"
     depth_top::FT
     "Depth of layer bottom [m]"
     depth_bottom::FT
     "Elastic optical constituents active in this layer"
-    constituents::Vector{<:AbstractOceanConstituent{FT}}
+    constituents::Vector{AbstractOceanConstituent{FT}}
     "Inelastic processes (fluorescence, Raman) active in this layer"
-    inelastic::Vector{<:AbstractOceanInelasticProcess{FT}}
+    inelastic::Vector{AbstractOceanInelasticProcess{FT}}
 
     function OceanLayer{FT}(depth_top, depth_bottom, constituents,
                             inelastic) where {FT}
@@ -52,10 +52,18 @@ end
 _constituent_float_type(::AbstractOceanConstituent{FT}) where {FT} = FT
 _inelastic_float_type(::AbstractOceanInelasticProcess{FT}) where {FT} = FT
 
-"Geometric thickness [m]"
+"""
+    thickness(x)
+
+Return the geometric thickness `[m]` of a layer, a column or the optics of a layer.
+"""
 thickness(layer::OceanLayer) = layer.depth_bottom - layer.depth_top
 
-"Midpoint depth [m]"
+"""
+    midpoint_depth(layer::OceanLayer)
+
+Return the depth `[m]` of the middle of `layer`.
+"""
 midpoint_depth(layer::OceanLayer) = (layer.depth_top + layer.depth_bottom) / 2
 
 function Base.show(io::IO, layer::OceanLayer{FT}) where {FT}

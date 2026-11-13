@@ -27,10 +27,9 @@ using QuadGK
         @test_throws ArgumentError GaussianEmission{Float64}(center_nm = -1.0,  σ_nm = 1.0)
     end
 
-    @testset "WavenumberShiftEmission: Raman peak at 440 nm → ≈ 491 nm" begin
-        # 3400 cm⁻¹ Stokes shift moves ν' = 10⁷/440 ≈ 22727 cm⁻¹ to ν ≈ 19327 cm⁻¹,
-        # which is λ ≈ 517 nm. Wait — redo: shift for water Raman is 3400 cm⁻¹;
-        # at λ'=440 we expect emission peak λ = 10⁷/(22727 - 3400) = 10⁷/19327 ≈ 517.4 nm.
+    @testset "WavenumberShiftEmission: Raman peak at 440 nm → 517.4 nm" begin
+        # The 3400 cm⁻¹ Stokes shift moves ν' = 10⁷/440 ≈ 22727 cm⁻¹ to ν ≈ 19327 cm⁻¹,
+        # so the emission peaks at λ = 10⁷/19327 ≈ 517.4 nm.
         r = WavenumberShiftEmission{Float64}(shift_cm_inv = 3400.0, σ_cm_inv = 85.0)
 
         λ_prime = 440.0

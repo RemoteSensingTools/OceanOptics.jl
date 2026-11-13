@@ -12,14 +12,18 @@
 #
 # from in vivo specific absorption spectra a*_k of the groups and their
 # relative contents c_k. The total a_ph — packaging included — still comes
-# from the phytoplankton model; only its attribution is added. The shares
+# from the phytoplankton model; only its attribution is added. With
+# `Bricaud1998` that total is the particulate absorption a_p, detritus
+# included, and the shares apply to all of it. The shares
 # come from unpackaged spectra, so packaging is assumed to flatten all
 # groups alike at each wavelength.
 #
-# Where every group spectrum is zero, or outside the tabulated range, the
-# absorption goes to the part `:unassigned` instead of being guessed (the
-# shares jump there). Fluorescence counts `:unassigned` with η = 0 unless
-# told otherwise.
+# Outside the tabulated range of the pigment spectra the shares are those of
+# the nearest tabulated wavelength (`HoldEdgeShares`, the default), so that no
+# absorption is dropped there; `UnassignedOutsideTable` instead puts all of
+# it in the part `:unassigned`. Where every group spectrum is zero the
+# absorption is `:unassigned` in both cases. Fluorescence counts
+# `:unassigned` with η = 0 unless told otherwise.
 #
 # Two partitions are bundled:
 #   ProspectPigments    — land analogy: chlorophyll a+b and carotenoids with
@@ -43,15 +47,17 @@ abstract type AbstractPigmentPartition end
 """
     pigment_parts(p::AbstractPigmentPartition) -> Tuple{Vararg{Symbol}}
 
-Names of the pigment groups of `p`; the last is `:unassigned`.
+Return the names of the pigment groups of `p`; the last is `:unassigned`.
 """
 function pigment_parts end
 
 """
     pigment_class(p::AbstractPigmentPartition, part::Symbol) -> Symbol
 
-`:chlorophyll`, `:carotenoid`, `:phycobilin` or `:unassigned`: the role
-that sets the default energy-transfer efficiency of the part in
+Return the role of `part`: `:chlorophyll`, `:carotenoid` (photosynthetic or lumped
+carotenoids), `:photoprotective_carotenoid`, `:phycobilin` or `:unassigned`.
+
+The role sets the default energy-transfer efficiency of the part in
 [`chlorophyll_fluorescence`](@ref).
 """
 function pigment_class end
@@ -59,19 +65,58 @@ function pigment_class end
 """
     pigment_fractions(p::AbstractPigmentPartition, λ) -> Tuple
 
-Share of phytoplankton absorption attributed to each part of
+Return the share of phytoplankton absorption attributed to each part of
 [`pigment_parts`](@ref)`(p)` at `λ` `[nm]`; the shares sum to one.
+
+Outside the tabulated pigment spectra (both bundled partitions start at 400 nm) the
+result depends on the partition's `outside` rule: with [`HoldEdgeShares`](@ref) (the
+default) the shares of the nearest tabulated wavelength apply, so absorption in the UV
+is attributed as at 400 nm; with [`UnassignedOutsideTable`](@ref) it is all
+`:unassigned`, and [`chlorophyll_fluorescence`](@ref) then has no excitation there
+(`:unassigned` has η = 0). Where all group spectra vanish the absorption is
+`:unassigned` under both rules.
 """
 function pigment_fractions end
 
 # Shares c_k a*_k / Σ c_j a*_j, or everything unassigned where the sum is zero.
-function _pigment_shares(s::NTuple{N, T}) where {N, T}
+function _pigment_shares(s::Tuple{T, Vararg{T}}) where {T}
     S = sum(s)
-    S > 0 || return (ntuple(_ -> zero(T), Val(N))..., one(T))
+    S > 0 || return (map(_ -> zero(T), s)..., one(T))
     return (map(x -> x / S, s)..., zero(T))
 end
 
 _unassigned_shares(::Val{N}, ::Type{T}) where {N, T} = (ntuple(_ -> zero(T), Val(N))..., one(T))
+
+"""
+    AbstractOutOfRangeShares
+
+Rule for the pigment shares at wavelengths outside the tabulated pigment spectra:
+[`HoldEdgeShares`](@ref) or [`UnassignedOutsideTable`](@ref).
+"""
+abstract type AbstractOutOfRangeShares end
+
+"""
+    HoldEdgeShares()
+
+Outside the tabulated range the pigment shares are those of the nearest tabulated
+wavelength (the default of the bundled partitions).
+
+The partition then attributes all absorption at every wavelength; the shares below
+400 nm are an extrapolation, not data.
+"""
+struct HoldEdgeShares <: AbstractOutOfRangeShares end
+
+"""
+    UnassignedOutsideTable()
+
+Outside the tabulated range all absorption goes to the part `:unassigned`, which
+[`chlorophyll_fluorescence`](@ref) counts with zero transfer efficiency by default.
+"""
+struct UnassignedOutsideTable <: AbstractOutOfRangeShares end
+
+# Wavelength at which the share tables are read, or `nothing` for "all unassigned".
+_share_wavelength(::HoldEdgeShares, λ, lo, hi) = clamp(λ, lo, hi)
+_share_wavelength(::UnassignedOutsideTable, λ, lo, hi) = _within(λ, lo, hi) ? λ : nothing
 
 # -----------------------------------------------------------------------------
 # Land analogy: PROSPECT-D chlorophyll and carotenoid spectra
@@ -88,8 +133,9 @@ Land-analogous partition into chlorophyll (a + b) and carotenoids, with
 the in vivo specific absorption spectra `Kab` and `Kca` of the leaf model
 PROSPECT-D (Féret et al. 2017) that Fluspect uses
 (`data/prospect_d_pigment_absorption.csv`, 400–800 nm). Parts:
-`(:chlorophyll, :carotenoids, :unassigned)`; outside 400–800 nm all
-absorption is `:unassigned`.
+`(:chlorophyll, :carotenoids, :unassigned)`. Outside 400–800 nm the shares at
+400 nm or 800 nm apply (`outside = HoldEdgeShares()`, the default), or all
+absorption is `:unassigned` (`outside = UnassignedOutsideTable()`).
 
 # Fields
 $(TYPEDFIELDS)
@@ -103,20 +149,23 @@ SCOPE's default leaf has 40 µg cm⁻² chlorophyll and 10 µg cm⁻²
 carotenoids, a ratio of 0.25; phytoplankton ratios differ between groups
 and with light history.
 """
-struct ProspectPigments{FT<:Real} <: AbstractPigmentPartition
+struct ProspectPigments{FT<:Real, X<:AbstractOutOfRangeShares} <: AbstractPigmentPartition
     "Carotenoid-to-chlorophyll mass ratio"
     carotenoid_ratio::FT
+    "Rule for the shares outside the tabulated 400–800 nm"
+    outside::X
 
-    function ProspectPigments{FT}(carotenoid_ratio) where {FT<:Real}
+    function ProspectPigments{FT, X}(carotenoid_ratio, outside::X) where {FT<:Real, X}
         isfinite(carotenoid_ratio) && carotenoid_ratio ≥ 0 ||
             throw(ArgumentError("ProspectPigments: carotenoid_ratio must be finite and " *
                                 "non-negative, got $carotenoid_ratio"))
-        new{FT}(carotenoid_ratio)
+        new{FT, X}(carotenoid_ratio, outside)
     end
 end
 
-ProspectPigments(; carotenoid_ratio::Real) =
-    ProspectPigments{float(typeof(carotenoid_ratio))}(carotenoid_ratio)
+ProspectPigments(; carotenoid_ratio::Real,
+                 outside::AbstractOutOfRangeShares = HoldEdgeShares()) =
+    ProspectPigments{float(typeof(carotenoid_ratio)), typeof(outside)}(carotenoid_ratio, outside)
 
 pigment_parts(::ProspectPigments) = (:chlorophyll, :carotenoids, :unassigned)
 
@@ -127,9 +176,10 @@ pigment_class(p::ProspectPigments, part::Symbol) =
 
 function pigment_fractions(p::ProspectPigments, λ::Real)
     T = promote_type(typeof(p.carotenoid_ratio), typeof(float(λ)))
-    first(_PROSPECT_KAB.λ) ≤ λ ≤ last(_PROSPECT_KAB.λ) || return _unassigned_shares(Val(2), T)
-    return _pigment_shares((T(linterp(_PROSPECT_KAB, λ)),
-                            T(p.carotenoid_ratio * linterp(_PROSPECT_KCA, λ))))
+    x = _share_wavelength(p.outside, λ, first(_PROSPECT_KAB.λ), last(_PROSPECT_KAB.λ))
+    x === nothing && return _unassigned_shares(Val(2), T)
+    return _pigment_shares((T(linterp(_PROSPECT_KAB, x)),
+                            T(p.carotenoid_ratio * linterp(_PROSPECT_KCA, x))))
 end
 
 function Base.show(io::IO, p::ProspectPigments)
@@ -156,9 +206,11 @@ their ratios matter, since the total comes from the phytoplankton model.
 
 Parts: `(:chlorophyll_a, :chlorophyll_b, :chlorophyll_c,
 :photosynthetic_carotenoids, :photoprotective_carotenoids,
-:phycoerythrin_peb, :phycoerythrin_pub, :unassigned)`. Outside
-400–750 nm, and where all group spectra vanish (above the chlorophyll a
-red band, ≈ 732 nm), all absorption is `:unassigned`.
+:phycoerythrin_peb, :phycoerythrin_pub, :unassigned)`. Below 400 nm the
+shares at 400 nm apply (`outside = HoldEdgeShares()`, the default) or all
+absorption is `:unassigned` (`outside = UnassignedOutsideTable()`). Where all
+group spectra vanish (above the chlorophyll a red band, ≈ 732 nm, and so
+also above 750 nm) all absorption is `:unassigned` under both rules.
 
 # Fields
 $(TYPEDFIELDS)
@@ -170,7 +222,7 @@ phyto = Phytoplankton(Chl = 0.5, pigments = pig)
 absorption_part(phyto, :photoprotective_carotenoids, 470.0)
 ```
 """
-struct Bidigare1990Pigments{FT<:Real} <: AbstractPigmentPartition
+struct Bidigare1990Pigments{FT<:Real, X<:AbstractOutOfRangeShares} <: AbstractPigmentPartition
     "Chlorophyll a `[mg m⁻³]`"
     chl_a::FT
     "Chlorophyll b `[mg m⁻³]`"
@@ -185,22 +237,25 @@ struct Bidigare1990Pigments{FT<:Real} <: AbstractPigmentPartition
     pe_peb::FT
     "Phycoerythrin rich in phycourobilin (Synechococcus WH8103 type) `[mg m⁻³]`"
     pe_pub::FT
+    "Rule for the shares outside the tabulated 400–750 nm"
+    outside::X
 
-    function Bidigare1990Pigments{FT}(c...) where {FT<:Real}
+    function Bidigare1990Pigments{FT, X}(outside::X, c...) where {FT<:Real, X}
         all(x -> isfinite(x) && x ≥ 0, c) ||
             throw(ArgumentError("Bidigare1990Pigments: concentrations must be finite and " *
                                 "non-negative, got $c"))
         any(>(0), c) ||
             throw(ArgumentError("Bidigare1990Pigments: at least one concentration must be positive"))
-        new{FT}(c...)
+        new{FT, X}(c..., outside)
     end
 end
 
 function Bidigare1990Pigments(; chl_a::Real, chl_b::Real = 0, chl_c::Real = 0, psc::Real = 0,
-                              ppc::Real = 0, pe_peb::Real = 0, pe_pub::Real = 0)
+                              ppc::Real = 0, pe_peb::Real = 0, pe_pub::Real = 0,
+                              outside::AbstractOutOfRangeShares = HoldEdgeShares())
     c  = (chl_a, chl_b, chl_c, psc, ppc, pe_peb, pe_pub)
     FT = float(promote_type(map(typeof, c)...))
-    return Bidigare1990Pigments{FT}(map(FT, c)...)
+    return Bidigare1990Pigments{FT, typeof(outside)}(outside, map(FT, c)...)
 end
 
 pigment_parts(::Bidigare1990Pigments) =
@@ -209,7 +264,8 @@ pigment_parts(::Bidigare1990Pigments) =
 
 function pigment_class(p::Bidigare1990Pigments, part::Symbol)
     part in (:chlorophyll_a, :chlorophyll_b, :chlorophyll_c) && return :chlorophyll
-    part in (:photosynthetic_carotenoids, :photoprotective_carotenoids) && return :carotenoid
+    part === :photosynthetic_carotenoids && return :carotenoid
+    part === :photoprotective_carotenoids && return :photoprotective_carotenoid
     part in (:phycoerythrin_peb, :phycoerythrin_pub) && return :phycobilin
     part === :unassigned && return :unassigned
     return _unknown_pigment(p, part)
@@ -220,8 +276,10 @@ _concentrations(p::Bidigare1990Pigments) = (p.chl_a, p.chl_b, p.chl_c, p.psc, p.
 function pigment_fractions(p::Bidigare1990Pigments{FT}, λ::Real) where {FT}
     T = promote_type(FT, typeof(float(λ)))
     tbl = first(_BIDIGARE_SPECTRA)
-    first(tbl.λ) ≤ λ ≤ last(tbl.λ) || return _unassigned_shares(Val(7), T)
-    return _pigment_shares(map((c, t) -> T(c * linterp(t, λ)), _concentrations(p), _BIDIGARE_SPECTRA))
+    x = _share_wavelength(p.outside, λ, first(tbl.λ), last(tbl.λ))
+    x === nothing && return _unassigned_shares(Val(7), T)
+    c = _concentrations(p)
+    return _pigment_shares(ntuple(i -> T(c[i] * linterp(_BIDIGARE_SPECTRA[i], x)), Val(7)))
 end
 
 function Base.show(io::IO, p::Bidigare1990Pigments)

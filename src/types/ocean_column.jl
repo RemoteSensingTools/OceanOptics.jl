@@ -35,7 +35,7 @@ overlaps) is enforced at construction time.
 # Fields
 $(TYPEDFIELDS)
 """
-struct OceanColumn{FT}
+struct OceanColumn{FT<:Real}
     "Surface-first, contiguous list of layers"
     layers::Vector{OceanLayer{FT}}
 
@@ -53,7 +53,7 @@ function _validate_column_contiguity(layers::Vector{<:OceanLayer})
     layers[1].depth_top == 0 ||
         throw(ArgumentError("OceanColumn: first layer must start at z = 0 " *
                             "(got $(layers[1].depth_top))"))
-    @inbounds for i in 1:length(layers)-1
+    for i in firstindex(layers):lastindex(layers)-1
         layers[i].depth_bottom == layers[i+1].depth_top ||
             throw(ArgumentError("OceanColumn: layers $i and $(i+1) are not " *
                                 "contiguous: depth_bottom=$(layers[i].depth_bottom) " *
@@ -64,19 +64,35 @@ end
 
 # --- Basic accessors ---------------------------------------------------------
 
-"Number of layers in the column."
+"""
+    n_layers(col)
+
+Return the number of layers of an [`OceanColumn`](@ref) or [`OceanColumnOptics`](@ref).
+"""
 n_layers(col::OceanColumn) = length(col.layers)
 
-"Total geometric thickness `[m]` — surface to column bottom."
 thickness(col::OceanColumn) = col.layers[end].depth_bottom - col.layers[1].depth_top
 
-"Depth of the column bottom `[m]`."
+"""
+    bottom_depth(col)
+
+Return the depth `[m]` of the bottom of an [`OceanColumn`](@ref) or
+[`OceanColumnOptics`](@ref).
+"""
 bottom_depth(col::OceanColumn) = col.layers[end].depth_bottom
 
-"Per-layer midpoint depths `[m]`."
+"""
+    midpoint_depths(col::OceanColumn)
+
+Return the midpoint depth `[m]` of every layer of `col`.
+"""
 midpoint_depths(col::OceanColumn) = [midpoint_depth(l) for l in col.layers]
 
-"Per-layer thicknesses `[m]`."
+"""
+    layer_thicknesses(col::OceanColumn)
+
+Return the thickness `[m]` of every layer of `col`.
+"""
 layer_thicknesses(col::OceanColumn) = [thickness(l) for l in col.layers]
 
 # --- Collection interface ---------------------------------------------------
@@ -101,9 +117,10 @@ end
 """
     uniform_column(constituents; n_layers=10, depth=50.0, inelastic=[])
 
-Build an `OceanColumn` with `n_layers` equal-thickness layers spanning
-0 → `depth` metres. Each layer carries the same `constituents` and
-`inelastic` lists.
+Build an [`OceanColumn`](@ref) of `n_layers` layers of equal thickness from the surface
+to `depth` `[m]`.
+
+Every layer carries the same `constituents` and `inelastic` processes.
 """
 function uniform_column(constituents::AbstractVector;
                         n_layers::Integer = 10,
@@ -130,10 +147,10 @@ end
 """
     fell_column(constituents; depth=60.0, inelastic=[])
 
-Build an `OceanColumn` following Fell (1997) §5.2.1: 1 m layers in
-0–10 m, 2 m layers in 10–20 m, 5 m layers below. Truncates gracefully
-if `depth < 20`; the deepest layer is trimmed so `depth_bottom ==
-depth` exactly.
+Build an [`OceanColumn`](@ref) on the vertical grid of Fell (1997) §5.2.1.
+
+Layers are 1 m thick in 0–10 m, 2 m in 10–20 m and 5 m below, down to `depth` `[m]`.
+The deepest layer is trimmed so that it ends at `depth` exactly, also for `depth < 20`.
 """
 function fell_column(constituents::AbstractVector;
                      depth::Real       = 60.0,
@@ -160,6 +177,8 @@ function fell_column(constituents::AbstractVector;
 end
 
 """
+    _append_staircase!(boundaries, D, Δ, upper)
+
 Append grid points `(last_boundary + Δ, last_boundary + 2Δ, …)` up to
 `upper` (capped at the column bottom `D`). Caller invariant: the
 previous stage's last boundary is already in `boundaries`.

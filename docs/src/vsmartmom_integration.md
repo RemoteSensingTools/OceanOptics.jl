@@ -8,8 +8,8 @@ documentation, not part of either package.
 ## Compatibility
 
 * OceanOptics' dependency bounds include the versions vSmartMOM resolves
-  to (`Interpolations` 0.16, `FastGaussQuadrature` 0.5 through its
-  CanopyOptics dependency); the OceanOptics test suite passes with them.
+  to (`FastGaussQuadrature` 0.5 through its CanopyOptics dependency,
+  `Adapt` 4); the OceanOptics test suite passes with them.
 * No exported names collide, so `using vSmartMOM, OceanOptics` works
   without qualification. (vSmartMOM's own `greek_coefficients`,
   `phase_function` and `scattering_matrix` refer to its analytic phase
@@ -85,6 +85,34 @@ cores = [layer_core_optics(l, μ_water, m, S.Stokes_IQUV(), l_trunc) for l in co
 nodes and the total-internal-reflection interval, which the interface
 implementation defines.
 
+## Precision and devices
+
+The models are evaluated on the host; the solver chooses the element type
+and the device of the results:
+
+```julia
+using Adapt
+col = column_optics(FT, column, λ; refractive_index = index, ℓ_max = l_trunc)   # FT = Float32 or Float64
+dev = adapt(architecture_array_type, col)      # e.g. CuArray; `Array` returns `col` without copying
+```
+
+Build the constituents in `Float64` and request `FT` here: tables and
+constants are `Float64`, and each stored value is rounded once. `adapt`
+moves every numeric array (`λ`, the `τ` of each component, the Greek
+coefficients, backscatter fractions, `phase_index`, refractive index,
+bottom albedo) and keeps the element type; labels, `phase_id` keys and
+the component and layer lists stay host objects, so the adapter loops
+over components on the host and hands their arrays to the kernels.
+`absorption_optical_depth(layer)`, `scattering_optical_depth(layer)`,
+`single_scattering_albedo(layer)` and `bottom_albedo(col)` work on the
+adapted column and return device arrays.
+
+Out of scope on a device: the quadrature that produces the Greek
+coefficients (`greek_expansion`), the constituent, phase-function and
+inelastic model structs (they hold or read host tables), and the absorbed
+light and emission diagnostics. Compute these on the host, before `adapt`
+(see "Precision and devices" in the [Consumer API](consumer_api.md)).
+
 ## Points for the solver side
 
 * **δ-BGE with vanishing elements.** vSmartMOM's `truncate_phase(δBGE…)`
@@ -99,6 +127,13 @@ implementation defines.
   `phase_id`. A wavelength-dependent component stores its distinct
   expansions plus `phase_index`, so `Z` is needed only per distinct entry
   (e.g. per band with `WavelengthDependentPhase(...; lookup = :nearest)`).
+  `phase_id` holds one content key per entry of `greek`
+  ([`phase_id`](@ref)`(c, iλ)` at a wavelength): equal keys mean equal
+  coefficients, `ℓ_max` and element type, so `(phase_id, m)` is a valid
+  cache key for `Z` before truncation.
+* **Scalar expansions.** `GreekCoefs`-based code that sizes by
+  `length(α)` needs [`zero_padded`](@ref)`(g)` for expansions computed with
+  `polarized = false`.
 * **Forward peaks.** Particle expansions (Fournier-Forand, hydrosol
   matrices) are not converged at practical `ℓ_max` — e.g. the Chowdhary
   AOS-IV hydrosols still have `β₁₀₀₀/2001 ≈ 3×10⁻³` — so truncation is
@@ -112,8 +147,12 @@ implementation defines.
   diagnostics and the reference fluorescence budget; energy closure
   (net irradiance below the surface = absorbed in the layers + absorbed by
   the floor) is the test.
-* **Inelastic sources** follow the photon contract on the
-  [Consumer API](@ref) page ([`radiance_source_kernel`](@ref)). For
+* **Inelastic sources**: [`radiance_source_kernel`](@ref) is the energy
+  kernel of every process, and [`conversion_units`](@ref) says whether the
+  photon-energy factor λ′/λ enters it ([`PhotonConversion`](@ref) for
+  fluorescence, [`EnergyConversion`](@ref) for the default
+  [`WaterRaman`](@ref)); the kernel already contains that factor, so a
+  solver must not apply λ′/λ again (see the [Consumer API](@ref) page). For
   fluorescence, [`excitation_optical_depth`](@ref)`(layer, j)` gives the
   excitation optical depth on the layer grid from the linked absorption
   components; [`excitation_absorption`](@ref) gives the same coefficient

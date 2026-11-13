@@ -26,9 +26,9 @@ Units, conventions and validation rules are on the *Consumer API* docs page.
 """
 module OceanOptics
 
-using DocStringExtensions
+using Adapt: Adapt, adapt
+using DocStringExtensions: DocStringExtensions, TYPEDEF, TYPEDFIELDS
 using FastGaussQuadrature: gausslegendre
-using Interpolations: linear_interpolation, Flat
 
 # -----------------------------------------------------------------------------
 # Type spine
@@ -101,7 +101,8 @@ export PureWater
 export AbstractPureWaterAbsorptionModel, IOCCG2018, PopeFry1997, Kou1993, SmithBaker1981
 export AbstractPureWaterScatteringModel, Morel1974, ZhangHu2009
 export CDOM, AbstractCDOMModel, BricaudMorelPrieur1981
-export Phytoplankton, AbstractPhytoplanktonModel, Bricaud1998, Gordon1992
+export Phytoplankton, AbstractPhytoplanktonModel, Bricaud1998
+export AbstractParticleScatteringModel, GordonMorel1983
 export NonAlgalParticles, AbstractNAPModel, BabinBricaud2003, FellMineral
 export TabulatedAbsorber, TabulatedScatterer
 export absorption, scattering, backscattering, attenuation, scattering_phase, is_total_absorption
@@ -109,6 +110,7 @@ export absorption_parts, absorption_by_part, absorption_part
 
 # Pigment partitions of phytoplankton absorption
 export ProspectPigments, Bidigare1990Pigments, pigment_parts, pigment_class, pigment_fractions
+export AbstractOutOfRangeShares, HoldEdgeShares, UnassignedOutsideTable
 
 # Refractive index of seawater
 export FixedRefractiveIndex, QuanFry1995, refractive_index
@@ -116,7 +118,8 @@ export FixedRefractiveIndex, QuanFry1995, refractive_index
 # Phase functions and expansions
 export FournierForandPhase, RayleighWaterPhase, HenyeyGreensteinPhase, PetzoldPhase
 export TabulatedGreekPhase, TabulatedMuellerPhase, WavelengthDependentPhase
-export GreekCoefficients, resize_moments, depolarized, mix_greek, evaluate_scattering_matrix
+export GreekCoefficients, resize_moments, depolarized, zero_padded, mix_greek
+export evaluate_scattering_matrix, phase_id
 export phase_function_value, phase_function_moments, greek_expansion
 export depolarizing_greek_expansion
 export backscatter_fraction, asymmetry_parameter, is_polarizable, is_wavelength_dependent
@@ -135,6 +138,7 @@ export single_scattering_albedo, bottom_albedo, interface_depths
 
 # Data loading (power-user API)
 export SpectralTable, linterp, data_path, load_spectral_csv
+export AbstractTableLookup, ExactLookup, LinearLookup, NearestLookup
 
 # Inelastic processes
 export GaussianEmission, WavenumberShiftEmission, TabulatedEmission, fwhm_to_sigma
@@ -142,7 +146,8 @@ export ExcitationPathway, IsotropicFluorescence, CDOMFluorescence, WaterRaman
 export chlorophyll_fluorescence, chloroplast_emission
 export excitation_absorption, excitation_range, excitation_pathways, emission, is_isotropic
 export quantum_yield, inelastic_coefficient, radiance_source_kernel, redistribution
-export raman_peak_wavelength
+export raman_peak_wavelength, raman_phase, natural_depolarization
+export AbstractConversionUnits, EnergyConversion, PhotonConversion, conversion_units
 
 # Light absorbed per component
 export absorbed_power, absorbed_photons, absorbed_par, inelastic_emission

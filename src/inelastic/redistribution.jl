@@ -2,8 +2,8 @@
 # Spectral redistribution functions f^I(λ', λ)
 # =============================================================================
 #
-# In Fell's (1997) factorization of an inelastic source operator (DESIGN
-# §7.1),
+# In Fell's (1997) factorization of an inelastic source operator (his
+# Eqs. 2.86–2.94),
 #
 #     b^I(τ; λ', λ) = a^I(τ; λ') · f^I(λ', λ)
 #
@@ -48,9 +48,10 @@ abstract type AbstractSpectralRedistribution{FT<:AbstractFloat} end
 """
     redistribution(r, λ_prime, λ) -> FT
 
-Evaluate the redistribution density `f(λ', λ)` `[1/nm]`. Must be
-normalized so `∫ f(λ', λ) dλ = 1` for every `λ'` inside the
-physically meaningful range of `r`.
+Evaluate the redistribution density `f(λ', λ)` `[1/nm]` of `r`.
+
+A method must be normalized so that `∫ f(λ', λ) dλ = 1` for every `λ'` in the range
+where `r` applies.
 """
 function redistribution end
 
@@ -95,13 +96,13 @@ GaussianEmission{FT}(; center_nm = FT(685.0), σ_nm = FT(10.6)) where {FT<:Abstr
     GaussianEmission{FT}(FT(center_nm), FT(σ_nm))
 GaussianEmission(; kwargs...) = GaussianEmission{Float64}(; kwargs...)
 
-function redistribution(r::GaussianEmission, λ_prime::Real, λ::Real)
+function redistribution(r::GaussianEmission{FT}, λ_prime::Real, λ::Real) where {FT}
     # `λ_prime` is unused — the emission shape is excitation-independent for
     # this redistribution class. Keeping it in the signature matches the
     # abstract contract so callers can dispatch uniformly.
-    σ = r.σ_nm
-    μ = r.center_nm
-    return inv(σ * sqrt(2π)) * exp(-((λ - μ) / σ)^2 / 2)
+    σ = _wide(r.σ_nm)
+    μ = _wide(r.center_nm)
+    return convert(_result_type(FT, λ), inv(σ * sqrt(2π)) * exp(-((_wide(λ) - μ) / σ)^2 / 2))
 end
 
 # -----------------------------------------------------------------------------
@@ -171,11 +172,14 @@ function TabulatedEmission(λ::AbstractVector{<:Real}, shape::AbstractVector{<:R
     return TabulatedEmission{FT}(x, y ./ area, String(source))
 end
 
-_trapezoid(x, y) = sum((x[i+1] - x[i]) * (y[i] + y[i+1]) / 2 for i in 1:length(x)-1)
+function _trapezoid(x, y)
+    Base.require_one_based_indexing(x, y)
+    return sum((x[i+1] - x[i]) * (y[i] + y[i+1]) / 2 for i in 1:length(x)-1)
+end
 
 function redistribution(r::TabulatedEmission, λ_prime::Real, λ::Real)
     x, y = r.λ, r.density
-    first(x) ≤ λ ≤ last(x) || return zero(promote_type(eltype(y), typeof(float(λ))))
+    _within(λ, first(x), last(x)) || return zero(promote_type(eltype(y), typeof(float(λ))))
     i = clamp(searchsortedlast(x, λ), 1, length(x) - 1)
     t = (λ - x[i]) / (x[i+1] - x[i])
     return (1 - t) * y[i] + t * y[i+1]
@@ -227,18 +231,28 @@ struct WavenumberShiftEmission{FT<:AbstractFloat} <: AbstractSpectralRedistribut
     end
 end
 
-WavenumberShiftEmission{FT}(; shift_cm_inv = FT(3400.0),
-                              σ_cm_inv     = FT(85.0)) where {FT<:AbstractFloat} =
+# O–H stretch band of liquid water as a single Gaussian (attributed to Haltrin &
+# Kattawar 1993): Stokes shift and standard deviation [1/cm]. Shared by the defaults
+# of `WavenumberShiftEmission` and `WaterRaman`.
+const _OH_STRETCH_SHIFT_CM_INV = 3400.0
+const _OH_STRETCH_SIGMA_CM_INV = 85.0
+
+WavenumberShiftEmission{FT}(; shift_cm_inv = FT(_OH_STRETCH_SHIFT_CM_INV),
+                              σ_cm_inv     = FT(_OH_STRETCH_SIGMA_CM_INV)) where {FT<:AbstractFloat} =
     WavenumberShiftEmission{FT}(FT(shift_cm_inv), FT(σ_cm_inv))
 WavenumberShiftEmission(; kwargs...) = WavenumberShiftEmission{Float64}(; kwargs...)
 
-function redistribution(r::WavenumberShiftEmission, λ_prime::Real, λ::Real)
-    # Convert wavelengths to wavenumbers, evaluate Gaussian, then apply the
-    # |dν/dλ| = 10⁷/λ² Jacobian so ∫ f(λ',λ) dλ = 1 holds in wavelength space.
+redistribution(r::WavenumberShiftEmission{FT}, λ_prime::Real, λ::Real) where {FT} =
+    convert(_result_type(FT, λ_prime, λ),
+            _wavenumber_shift_density(_wide(r.shift_cm_inv), _wide(r.σ_cm_inv),
+                                      _wide(λ_prime), _wide(λ)))
+
+# Gaussian in wavenumber around the shifted excitation wavenumber, times the
+# |dν/dλ| = 10⁷/λ² Jacobian so that ∫ f(λ′, λ) dλ = 1 in wavelength space.
+function _wavenumber_shift_density(shift, σ, λ_prime, λ)
     ν_prime  = 1e7 / λ_prime
     ν        = 1e7 / λ
-    ν_center = ν_prime - r.shift_cm_inv
-    σ        = r.σ_cm_inv
+    ν_center = ν_prime - shift
     g_ν      = inv(σ * sqrt(2π)) * exp(-((ν - ν_center) / σ)^2 / 2)
     return g_ν * (1e7 / λ^2)
 end
@@ -247,5 +261,16 @@ end
 # Convenience: FWHM ↔ σ conversion (useful for user-facing constructors)
 # -----------------------------------------------------------------------------
 
-"Convert Gaussian FWHM `[nm or 1/cm]` to standard deviation in the same unit."
+"""
+    fwhm_to_sigma(fwhm)
+
+Convert the full width at half maximum of a Gaussian to its standard deviation,
+`σ = FWHM / (2 √(2 ln 2))`, in the unit of `fwhm`.
+
+# Examples
+```jldoctest
+julia> round(fwhm_to_sigma(25.0); digits = 3)
+10.617
+```
+"""
 fwhm_to_sigma(fwhm::Real) = fwhm / (2 * sqrt(2 * log(2)))

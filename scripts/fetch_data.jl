@@ -20,11 +20,18 @@
 #   pope_fry_1997.csv           ← omlc.org/spectra/water/data/pope97.txt
 #   smith_baker_1981.csv        ← omlc.org/spectra/water/data/smith81.txt
 #
-# Tables *not* fetched by this script (no stable redistributable URL; must
-# be transcribed from the original publication):
-#   mason_cone_fry_2016.csv     — Appl. Opt. 55, 7163, Table 2
-#   bricaud_1995.csv            — JGR 100, 13321, Table 2
-#   petzold_sdh.csv             — Mobley (1994) "Light and Water" Appendix A.4
+# The other files in `data/` are not fetched by this script; each one's
+# header names its source, retrieval URL and checksum:
+#   bricaud_1998_A.csv, bricaud_1998_E.csv — Bricaud et al. (1998), JGR 103,
+#                                 31033, as tabulated for HydroLight (AEmidUVabs.txt)
+#   bidigare_1990_pigments.csv  — Bidigare et al. (1990), Ocean Optics Web Book
+#   petzold_sdh.csv             — Petzold (1972), Ocean Optics Web Book
+#   kou_1993.csv                — Kou, Labrie & Chylek (1993), omlc.org kou93b.txt
+#   ioccg_2018_pure_water.csv   — IOCCG (2018) composite, from the Loisel et al.
+#                                 (2023) HydroLight database (Dryad, CC0)
+#   rottgers_2014_temperature.csv — Röttgers, McKee & Utschig (2014), figshare
+#   fluspect_chloroplast_emission.csv, prospect_d_pigment_absorption.csv
+#                               — Fluspect / PROSPECT-D parameter file (SCOPE)
 #
 # Unit conventions
 # ----------------

@@ -11,3 +11,12 @@ linterp
 data_path
 load_spectral_csv
 ```
+
+## Table lookups
+
+```@docs
+AbstractTableLookup
+ExactLookup
+LinearLookup
+NearestLookup
+```

@@ -30,6 +30,18 @@
         @test attenuation(nap, 880.0) ≈ 0.20 rtol=1e-12
     end
 
+    @testset "FellMineral defaults are those of Fell (1997)" begin
+        # Fell (1997) §5.1.4, p. 120: ω₀ = 0.95 (Eq. 5.11) and a backscatter
+        # probability b_b,AS = 0.036; c ∝ 440/λ (Eq. 5.10).
+        nap = NonAlgalParticles{Float64, FellMineral}(c_ref = 0.40)
+        @test nap.ω_nap == 0.95
+        @test absorption(nap, 440.0) ≈ 0.05 * 0.40 rtol = 1e-12
+        @test scattering(nap, 440.0) ≈ 0.95 * 0.40 rtol = 1e-12
+        @test backscatter_fraction(scattering_phase(nap)) ≈ 0.036 rtol = 1e-8
+        @test backscattering(nap, 440.0) ≈ 0.95 * 0.036 * 0.40 rtol = 1e-8
+        @test backscattering(nap, 880.0) ≈ 0.95 * 0.036 * 0.20 rtol = 1e-8
+    end
+
     @testset "Construction validation" begin
         @test_throws ArgumentError NonAlgalParticles{Float64, FellMineral}(ω_nap = 1.1)
         @test_throws ArgumentError NonAlgalParticles{Float64, FellMineral}(c_ref = -1.0)

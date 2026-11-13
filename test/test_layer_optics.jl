@@ -5,6 +5,16 @@
     cdom  = CDOM{Float64}(a_ref = 0.05)
     λ     = [412.5, 443.0, 490.0, 555.0, 670.0]
 
+    @testset "PureWater at most once per layer" begin
+        twice = OceanLayer(0.0, 1.0, AbstractOceanConstituent{Float64}[water, cdom, PureWater{Float64}()])
+        err = try layer_optics(twice, λ; ℓ_max = 4) catch e; e end
+        @test err isa ArgumentError && occursin("PureWater 2 times", err.msg)
+        # Other constituents may repeat: two CDOM pools add.
+        one_ = layer_optics(OceanLayer(0.0, 1.0, AbstractOceanConstituent{Float64}[water, cdom]), λ; ℓ_max = 4)
+        two  = layer_optics(OceanLayer(0.0, 1.0, AbstractOceanConstituent{Float64}[water, cdom, cdom]), λ; ℓ_max = 4)
+        @test absorption_optical_depth(two) .- absorption_optical_depth(one_) ≈ absorption(cdom, λ) rtol = 1e-12
+    end
+
     @testset "Components and mixed quantities" begin
         layer = OceanLayer(2.0, 7.0, AbstractOceanConstituent{Float64}[water, cdom, phyto])
         o = layer_optics(layer, λ; ℓ_max = 32)
@@ -85,7 +95,7 @@
         # vSmartMOM-style wavenumber grid, evaluated at λ = 1e7/ν.
         ν = collect(range(1e7 / 670, 1e7 / 412.5; length = 7))
         @test n_wavelengths(layer_optics(layer, 1e7 ./ ν; ℓ_max = 8)) == 7
-        o32 = layer_optics(layer, λ; ℓ_max = 8, FT = Float32)
+        o32 = layer_optics(Float32, layer, λ; ℓ_max = 8)
         @test o32 isa OceanLayerOptics{Float32}
         @test optical_depth(o32) ≈ Float32.(optical_depth(o)) rtol = 1e-5
         # Outside a constituent's tabulated range: an error, never an extrapolation.
@@ -117,7 +127,11 @@
         @test greek_expansion(cf, 1) === cf.greek[1] && greek_expansion(cf, 2000) === cf.greek[2]
         @test cf.phase_index[findfirst(>(550.0), λf)] == 2
         @test t < 10
-        @test_throws ArgumentError WavelengthDependentPhase(λ2, pf.phases; lookup = :linear)
+        @test_throws "lookup must be :exact or :nearest, got :linear" WavelengthDependentPhase(
+            λ2, pf.phases; lookup = :linear)
+        @test pn isa WavelengthDependentPhase{Float64, <:Any, NearestLookup}
+        @test WavelengthDependentPhase(λ2, pf.phases; lookup = NearestLookup()) isa
+              WavelengthDependentPhase{Float64, <:Any, NearestLookup}
     end
 
     @testset "Total absorption cannot be double counted" begin

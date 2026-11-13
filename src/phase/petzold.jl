@@ -51,22 +51,31 @@ end
 
 PetzoldPhase() = PetzoldPhase{Float64}()
 
+# The table is a measurement without parameters; its quadrature break points
+# are floating-point numbers.
+PetzoldPhase{FT}() where {FT<:Real} =
+    throw(ArgumentError("PetzoldPhase{$FT}: the Petzold table has no parameter to " *
+                        "differentiate and is available in floating-point types only; " *
+                        "use a parametric phase function (FournierForandPhase, " *
+                        "HenyeyGreensteinPhase) in a layer that carries dual numbers"))
+
 _petzold_forward_exponent(pf::PetzoldPhase) =
     log(pf.p[2] / pf.p[1]) / log(pf.θ[2] / pf.θ[1])
 
-function _phase_at_angle(pf::PetzoldPhase, θ::Real)
+function _phase_at_angle(pf::PetzoldPhase{FT}, θ::Real) where {FT}
+    T = promote_type(FT, typeof(float(θ)))
     θs, ps = pf.θ, pf.p
-    if θ ≤ first(θs)        # power-law forward peak; finite at θ = 0
-        return first(ps) * (max(θ, 1e-300) / first(θs))^_petzold_forward_exponent(pf)
+    if θ ≤ first(θs)        # power-law forward peak; `floatmin` avoids 0^a at θ = 0
+        return T(first(ps) * (max(θ, floatmin(T)) / first(θs))^_petzold_forward_exponent(pf))
     end
-    θ ≥ last(θs) && return last(ps)
+    θ ≥ last(θs) && return T(last(ps))
     i = searchsortedlast(θs, θ)
     t = log(θ / θs[i]) / log(θs[i+1] / θs[i])
-    return ps[i] * (ps[i+1] / ps[i])^t
+    return T(ps[i] * (ps[i+1] / ps[i])^t)
 end
 
 phase_function_value(pf::PetzoldPhase{FT}, μ::Real) where {FT} =
-    FT(_phase_at_angle(pf, acos(clamp(μ, -1, 1))))
+    convert(_result_type(FT, μ), _phase_at_angle(pf, acos(clamp(μ, -1, 1))))
 
 _angular_breaks(pf::PetzoldPhase) = pf.θ
 _forward_exponent(pf::PetzoldPhase) = _petzold_forward_exponent(pf)

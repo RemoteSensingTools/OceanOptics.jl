@@ -7,6 +7,13 @@
     # Exponential decay: a(λ+1/S) = a(λ)/e
     @test absorption(cdom, 440.0 + 1/0.014) ≈ 0.03 / ℯ rtol=1e-10
 
+    # Defaults: slope 0.014 1/nm (Bricaud, Morel & Prieur 1981; Fell 1997, Eq. 5.4)
+    # anchored at 440 nm, so a(540)/a(440) = exp(−1.4) = 0.24660.
+    d = CDOM{Float64}()
+    @test d.slope == 0.014 && d.λ_ref == 440.0
+    @test absorption(d, 540.0) / absorption(d, 440.0) ≈ exp(-1.4) rtol = 1e-12
+    @test absorption(d, 540.0) / absorption(d, 440.0) ≈ 0.24660 rtol = 1e-4
+
     # Monotonic decay into the red
     @test absorption(cdom, 500.0) < absorption(cdom, 440.0)
     @test absorption(cdom, 400.0) > absorption(cdom, 440.0)

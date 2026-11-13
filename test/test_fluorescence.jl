@@ -1,3 +1,5 @@
+using QuadGK
+
 @testset "Fluorescence processes" begin
 
     @testset "IsotropicFluorescence with a CDOM absorber" begin
@@ -108,8 +110,27 @@
         @test η[:phycoerythrin_peb] == 1 && η[:unassigned] == 0
         a = absorption_by_part(pb, 470.0)
         @test excitation_absorption(f, 470.0) ≈ 0.02(a[1] + a[2] + a[3] + 0.8a[4] + a[6] + a[7]) rtol = 1e-12
-        @test_throws ArgumentError chlorophyll_fluorescence(pb; quantum_yield = 0.02,
-                                                            transfer = (photosynthetic_carotenoids = 0.8,))
+
+        # Defaults: carotenoid_transfer reaches the photosynthetic carotenoids only;
+        # photoprotective carotenoids dissipate (η = 0) unless photoprotective_transfer says otherwise.
+        fd = chlorophyll_fluorescence(pb; quantum_yield = 0.02, carotenoid_transfer = 0.7)
+        ηd = Dict(x.part => x.efficiency for x in excitation_pathways(fd))
+        @test ηd[:photosynthetic_carotenoids] == 0.7 && ηd[:photoprotective_carotenoids] == 0
+        for λ in (360.0, 440.0, 470.0)
+            a = absorption_by_part(pb, λ)
+            @test a[5] > 0
+            @test excitation_absorption(fd, λ) ≈ 0.02(a[1] + a[2] + a[3] + 0.7a[4] + a[6] + a[7]) rtol = 1e-12
+        end
+        fp = chlorophyll_fluorescence(pb; quantum_yield = 0.02, carotenoid_transfer = 0.7,
+                                      photoprotective_transfer = 0.25)
+        a = absorption_by_part(pb, 440.0)
+        @test excitation_absorption(fp, 440.0) - excitation_absorption(fd, 440.0) ≈ 0.02 * 0.25a[5] rtol = 1e-12
+        # carotenoid_transfer is required while a photosynthetic carotenoid has no η ...
+        @test_throws ArgumentError chlorophyll_fluorescence(pb; quantum_yield = 0.02)
+        # ... and not when `transfer` gives it (photoprotective carotenoids default to 0).
+        ft = chlorophyll_fluorescence(pb; quantum_yield = 0.02,
+                                      transfer = (photosynthetic_carotenoids = 0.8,))
+        @test Dict(x.part => x.efficiency for x in excitation_pathways(ft))[:photoprotective_carotenoids] == 0
         @test_throws ArgumentError chlorophyll_fluorescence(pb; quantum_yield = 0.02,
                                                             carotenoid_transfer = 0.5,
                                                             transfer = (fucoxanthin = 1.0,))
@@ -131,14 +152,53 @@
         @test_throws UndefKeywordError CDOMFluorescence(cdom; emission = em)
     end
 
+    # Excitation below the 400 nm start of the pigment tables: the shares at 400 nm
+    # apply, so a partition whose parts all transfer with η = 1 excites exactly like
+    # the unpartitioned phytoplankton (reference: the total absorption itself).
+    @testset "UV excitation with a pigment partition" begin
+        plain = Phytoplankton(Chl = 0.5)
+        whole = chlorophyll_fluorescence(plain; quantum_yield = 0.02, excitation_range = (350.0, 700.0))
+        for pig in (ProspectPigments(carotenoid_ratio = 0.3),
+                    Bidigare1990Pigments(chl_a = 0.5, chl_c = 0.1, psc = 0.3, ppc = 0.15))
+            phyto = Phytoplankton(Chl = 0.5, pigments = pig)
+            f = chlorophyll_fluorescence(phyto; quantum_yield = 0.02, carotenoid_transfer = 1.0,
+                                         photoprotective_transfer = 1.0,
+                                         excitation_range = (350.0, 700.0))
+            # Continuous across 400 nm (a_p changes by < 0.1 % per 0.001 nm).
+            @test excitation_absorption(f, 399.999) ≈ excitation_absorption(f, 400.0) rtol = 1e-4
+            @test excitation_absorption(f, 399.0) ≈ 0.02 * absorption(plain, 399.0) rtol = 1e-12
+            @test excitation_absorption(f, 399.0) > 0.9 * excitation_absorption(f, 400.0)
+            I, _  = quadgk(x -> excitation_absorption(f, x), 350.0, 400.0, 700.0; rtol = 1e-8)
+            I0, _ = quadgk(x -> excitation_absorption(whole, x), 350.0, 400.0, 700.0; rtol = 1e-8)
+            @test I ≈ I0 rtol = 1e-7
+            Iref, _ = quadgk(x -> 0.02 * absorption(plain, x), 350.0, 400.0, 700.0; rtol = 1e-8)
+            @test I ≈ Iref rtol = 1e-7
+        end
+        # Strict rule: no excitation outside the table, so the 350–700 nm integral is
+        # that of the total absorption over 400–700 nm only.
+        strict = Phytoplankton(Chl = 0.5, pigments = ProspectPigments(carotenoid_ratio = 0.3,
+                                                                    outside = UnassignedOutsideTable()))
+        fs = chlorophyll_fluorescence(strict; quantum_yield = 0.02, carotenoid_transfer = 1.0,
+                                      excitation_range = (350.0, 700.0))
+        @test excitation_absorption(fs, 399.999) == 0
+        Is, _ = quadgk(x -> excitation_absorption(fs, x), 350.0, 400.0, 700.0; rtol = 1e-8)
+        Ivis, _ = quadgk(x -> 0.02 * absorption(plain, x), 400.0, 700.0; rtol = 1e-8)
+        @test Is ≈ Ivis rtol = 1e-7
+    end
+
     @testset "Photon and energy kernels" begin
         phyto = Phytoplankton(Chl = 1.0)
         sif   = chlorophyll_fluorescence(phyto; quantum_yield = 0.02)
         λ′, λ = 440.0, 685.0
         # Quantum yield is part of the excitation coefficient, applied once.
         @test excitation_absorption(sif, λ′) ≈ quantum_yield(sif) * absorption(phyto, λ′)
-        # Energy kernel = photon kernel × λ'/λ (ratio of photon energies).
-        @test radiance_source_kernel(sif, λ′, λ) ≈ inelastic_coefficient(sif, λ′, λ) * λ′ / λ
+        # Fluorescence converts photons: the energy kernel is φ a f λ'/λ, written out
+        # from its parts (φ = 0.02, Fluspect emission density at 685 nm).
+        @test conversion_units(sif) === PhotonConversion()
+        @test radiance_source_kernel(sif, λ′, λ) ≈
+              0.02 * absorption(phyto, λ′) * redistribution(chloroplast_emission(), λ′, λ) * 440 / 685
+        @test inelastic_coefficient(sif, λ′, λ) ≈
+              0.02 * absorption(phyto, λ′) * redistribution(chloroplast_emission(), λ′, λ)
         # Photon budget: emission integrates to the excitation coefficient.
         em = 600.0:0.25:900.0
         @test sum(inelastic_coefficient(sif, λ′, x) for x in em) * step(em) ≈

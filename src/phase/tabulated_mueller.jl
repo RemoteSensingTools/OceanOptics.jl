@@ -190,11 +190,11 @@ function _mueller_at(pf::TabulatedMuellerPhase, θs::AbstractVector)
         h   = pf.θ[i+1] - pf.θ[i]
         f11 = exp(_hermite(log(pf.F11[i]), log(pf.F11[i+1]), pf.slopes[1][i], pf.slopes[1][i+1], h, t))
         F.F11[j] = f11
-        for (s, k) in enumerate((:F12, :F22, :F33, :F34, :F44))
-            v = getfield(pf, k)
+        for (s, v, out) in zip(1:5, (pf.F12, pf.F22, pf.F33, pf.F34, pf.F44),
+                               (F.F12, F.F22, F.F33, F.F34, F.F44))
             r = _hermite(v[i] / pf.F11[i], v[i+1] / pf.F11[i+1],
                          pf.slopes[s+1][i], pf.slopes[s+1][i+1], h, t)
-            getfield(F, k)[j] = r * f11
+            out[j] = r * f11
         end
     end
     return F

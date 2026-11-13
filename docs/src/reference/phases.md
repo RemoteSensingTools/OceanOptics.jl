@@ -18,6 +18,8 @@ WavelengthDependentPhase
 GreekCoefficients
 resize_moments
 depolarized
+zero_padded
+phase_id
 mix_greek
 evaluate_scattering_matrix
 ```

@@ -1,9 +1,20 @@
-# Dataset:      Phytoplankton specific-absorption exponent E(λ) in
-#               a_φ*(λ) = A(λ) · Chl^(-E(λ))
-# Source:       Bricaud, Morel, Babin, Allali & Claustre (1998), JGR 103, 31033.
-# UV extension: Morrison & Nelson (2004); Vasilkov et al. (2005).
+# Dataset:      Particulate absorption exponent E(λ) in
+#               a_p(λ) = A(λ) · Chl^E(λ)   [1/m], Chl in mg/m³
+#               (all particles of Case-1 water: phytoplankton plus detritus;
+#               A(440) = 0.0520, E(440) = 0.6350)
+# Source:       Bricaud, Morel, Babin, Allali & Claustre (1998),
+#               "Variations of light absorption by suspended particles with
+#               chlorophyll a concentration in oceanic (case 1) waters:
+#               Analysis and implications for bio-optical models,"
+#               JGR 103, 31033-31044. doi:10.1029/98JC02712
+#               as tabulated for HydroLight's Case-1 model (AEmidUVabs.txt),
+#               whose header reads "particle absorption (phytoplankton plus
+#               detritus) ... ap(wave) = A(wave)*[chl]^E(wave)".
+# UV extension: Morrison & Nelson (2004), Limnol. Oceanogr. 49, 215-224;
+#               Vasilkov et al. (2005), Appl. Opt. 44, 2863-2869.
 # Retrieved:    https://www.oceanopticsbook.info/packages/iws_l2h/conversion/files/AEmidUVabs.txt
-#               (Ocean Optics Web Book, accessed 2026-04-21)
+#               (Ocean Optics Web Book; HydroLight-EcoLight v5 companion
+#               file, C. D. Mobley, accessed 2026-04-21)
 # License:      Creative Commons Attribution (Ocean Optics Web Book site-wide).
 # Range:        300–1000 nm, 2 nm resolution.
 # Units:        lambda_nm [nm], E [dimensionless].

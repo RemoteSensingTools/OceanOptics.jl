@@ -1,3 +1,7 @@
+# Builds the documentation (strict: doctests, cross-references, exported
+# docstrings) on every pull request and push. `deploydocs` publishes only for
+# pushes to main and tags; pull-request builds are checks without deployment.
+# This is the only workflow that builds the docs (CI.yml runs the tests).
 name: Documentation
 
 on:

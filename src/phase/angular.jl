@@ -114,13 +114,14 @@ _scaled(v::Tuple, ℓ_max) = reduce(vcat, (_scaled(x, ℓ_max) for x in v))
 # -----------------------------------------------------------------------------
 
 """
-    _legendre_moments(fvals, θ, w, ℓ_max) -> Vector{Float64}
+    _legendre_moments(fvals, θ, w, ℓ_max) -> Vector
 
-`β_ℓ = (2ℓ+1)/2 ∫₀^π f(θ) P_ℓ(cos θ) sin θ dθ` for `ℓ = 0:ℓ_max`.
+`β_ℓ = (2ℓ+1)/2 ∫₀^π f(θ) P_ℓ(cos θ) sin θ dθ` for `ℓ = 0:ℓ_max`, in the element type of
+`fvals` promoted with `Float64` (the nodes and weights).
 """
 function _legendre_moments(fvals::AbstractVector, θ::AbstractVector, w::AbstractVector,
                            ℓ_max::Integer)
-    β = zeros(ℓ_max + 1)
+    β = zeros(promote_type(eltype(fvals), Float64), ℓ_max + 1)
     @inbounds for i in eachindex(θ)
         x  = cos(θ[i])
         fw = fvals[i] * w[i]
@@ -208,9 +209,10 @@ end
 """
     evaluate_scattering_matrix(g::GreekCoefficients, μ) -> NamedTuple
 
-Angular scattering matrix reconstructed from the expansion at scattering
-cosines `μ`, in the standard convention (Hansen & Travis 1974;
-Mishchenko et al. 2002: `F₁₂ < 0` for Rayleigh scattering at 90°):
+Return the angular scattering matrix of the expansion `g` at the scattering cosines `μ`.
+
+The elements are in the standard convention (Hansen & Travis 1974; Mishchenko et al.
+2002: `F₁₂ < 0` for Rayleigh scattering at 90°):
 
 ```
 F = [F11 F12  0    0
@@ -219,7 +221,7 @@ F = [F11 F12  0    0
      0   0   -F34  F44]
 ```
 
-normalized so that `(1/2)∫ F11 dμ = 1`. Returns `(; F11)` for a scalar
+normalized so that `(1/2)∫ F11 dμ = 1`. The result is `(; F11)` for a scalar
 expansion and `(; F11, F12, F22, F33, F34, F44)` otherwise.
 """
 function evaluate_scattering_matrix(g::GreekCoefficients{FT}, μ::AbstractVector{<:Real}) where {FT}

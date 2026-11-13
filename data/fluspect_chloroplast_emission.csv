@@ -11,8 +11,10 @@
 #               doi:10.1016/j.rse.2018.04.012
 # Retrieved:    https://raw.githubusercontent.com/Christiaanvandertol/SCOPE/master/input/fluspect_parameters/Optipar2017_ProspectD.mat
 #               (2026-10-17), SHA-256 03bd2dfc37e11fa085f00013ce99d6c8ed5a0b427e4c65211f4d32e36f8cc596; identical values in the copy redistributed with CliMA Land
-# License:      SCOPE is distributed under the GNU GPL v3; CliMA Land redistributes the same file under
-#               Apache-2.0. See README (Data) before reusing.
+# Provenance:   Transcribed from the SCOPE parameter file named under "Retrieved". SCOPE uses these
+#               spectra in Fluspect (papers above); the measurements they derive from have not been
+#               traced for this package. Bundled as data with attribution; no SCOPE code (GNU GPL v3)
+#               is part of this package.
 # Convention:   Photon-number densities per nm of emission wavelength: SCOPE (src/RTMs/RTMf.m) converts
 #               excitation irradiance to photons, applies fqe * phi * kChl, and converts the emitted
 #               photons back to energy. Each column sums to 1 on the 1 nm grid (unit area).

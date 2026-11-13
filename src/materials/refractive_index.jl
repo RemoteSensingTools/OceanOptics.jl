@@ -16,23 +16,32 @@
 # is chosen explicitly.
 # =============================================================================
 
-"Model for the real refractive index of seawater relative to air."
+"""
+$(TYPEDEF)
+
+Model for the real refractive index of seawater relative to air; see
+[`refractive_index`](@ref).
+"""
 abstract type AbstractRefractiveIndexModel end
 
 """
 $(TYPEDEF)
 
-Wavelength-independent refractive index of seawater relative to air.
+Wavelength-independent refractive index of seawater relative to air,
+`n ≥ 1` (`n = 1` is an index-matched interface).
 
 # Fields
 $(TYPEDFIELDS)
 """
-struct FixedRefractiveIndex{FT<:AbstractFloat} <: AbstractRefractiveIndexModel
+struct FixedRefractiveIndex{FT<:Real} <: AbstractRefractiveIndexModel
     "Index relative to air"
     n::FT
 
-    function FixedRefractiveIndex{FT}(n::FT) where {FT<:AbstractFloat}
-        isfinite(n) && n > 0 || throw(ArgumentError("FixedRefractiveIndex: n must be positive, got $n"))
+    function FixedRefractiveIndex{FT}(n::FT) where {FT<:Real}
+        isfinite(n) && n ≥ 1 ||
+            throw(ArgumentError("FixedRefractiveIndex: the index of seawater relative to air " *
+                                "must be finite and ≥ 1, got n = $n; check that it is " *
+                                "n_water / n_air and not its inverse"))
         new{FT}(n)
     end
 end
@@ -55,7 +64,7 @@ $(TYPEDFIELDS)
 
 Queries outside the fitted domain throw unless `extrapolate = true`.
 """
-struct QuanFry1995{FT<:AbstractFloat} <: AbstractRefractiveIndexModel
+struct QuanFry1995{FT<:Real} <: AbstractRefractiveIndexModel
     "Temperature `[°C]`"
     temperature::FT
     "Salinity `[PSU]`"
@@ -66,7 +75,7 @@ end
 
 function QuanFry1995(; temperature::Real, salinity::Real, extrapolate::Bool = false)
     FT = float(promote_type(typeof(temperature), typeof(salinity)))
-    extrapolate || (0 ≤ temperature ≤ 30 && 0 ≤ salinity ≤ 35) ||
+    extrapolate || (_within(temperature, 0, 30) && _within(salinity, 0, 35)) ||
         throw(DomainError((temperature, salinity),
                           "QuanFry1995 is fitted to 0–30 °C and 0–35 PSU; pass extrapolate = true to use it outside"))
     return QuanFry1995{FT}(FT(temperature), FT(salinity), extrapolate)
@@ -75,17 +84,20 @@ end
 """
     refractive_index(model, λ) -> FT
 
-Real refractive index of seawater relative to air at wavelength `λ` `[nm]`
+Return the real refractive index of seawater relative to air at wavelength `λ` `[nm]`
 (a number or a vector).
 """
 refractive_index(m::FixedRefractiveIndex, λ::Real) = m.n
-refractive_index(m::AbstractRefractiveIndexModel, λ::AbstractVector) = [refractive_index(m, x) for x in λ]
+refractive_index(m::AbstractRefractiveIndexModel, λ::AbstractVector) =
+    map(Base.Fix1(refractive_index, m), λ)
 
+# The message is one literal: this method also runs per element in a device
+# broadcast, where a string cannot be built.
 function refractive_index(m::QuanFry1995{FT}, λ::Real) where {FT}
-    m.extrapolate || 400 ≤ λ ≤ 700 ||
-        throw(DomainError(λ, "QuanFry1995 is fitted to 400–700 nm; pass extrapolate = true " *
-                             "to use it outside, or use FixedRefractiveIndex"))
-    return FT(_quan_fry_index(λ, m.temperature, m.salinity))
+    m.extrapolate || _within(λ, 400, 700) ||
+        throw(DomainError(λ, "QuanFry1995 is fitted to 400–700 nm; pass extrapolate = true to use it outside, or use FixedRefractiveIndex"))
+    return convert(_result_type(FT, λ),
+                   _quan_fry_index(_wide(λ), _wide(m.temperature), _wide(m.salinity)))
 end
 
 # Quan & Fry (1995) Eq. (4) coefficients; relative to air, λ in nm.

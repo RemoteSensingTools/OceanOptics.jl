@@ -2,7 +2,7 @@
 
 Inherent optical properties (IOPs), phase-function Legendre expansions,
 and inelastic source terms of natural waters from biogeochemical state —
-in Julia, automatic-differentiation-transparent, and designed to feed
+in Julia, and designed to feed
 [vSmartMOM.jl](https://github.com/RemoteSensingTools/vSmartMOM.jl)'s
 forthcoming `OceanSurface` boundary.
 
@@ -14,10 +14,10 @@ publishes is stable and solver-agnostic.
 
 ## Design principles
 
-The full architecture memo lives in
+The historical design memo
 [`DESIGN.md`](https://github.com/RemoteSensingTools/OceanOptics.jl/blob/main/DESIGN.md)
-and is the authoritative long-form document. The four load-bearing
-principles are:
+records the original plans; where it differs from this manual, the manual is
+authoritative. The four load-bearing principles are:
 
 1. **RT-solver neutrality.** The primary output is an
    [`OceanLayerOptics`](@ref) bundle consumable by any plane-parallel
@@ -108,8 +108,17 @@ For a longer walk-through with numerical output, see
 ## Scope and non-scope
 
 OceanOptics.jl **does** produce IOPs, phase-function expansions, and
-inelastic source kernels from biogeochemical state. It is AD-transparent
-through ForwardDiff.
+inelastic source kernels from biogeochemical state. The elastic path is
+generic in its element type, so that ForwardDiff dual numbers can be
+carried by the model parameters (chlorophyll, CDOM reference absorption
+and slope, the non-algal particle parameters, temperature, salinity and
+depolarization of water, the Fournier-Forand backscatter fraction, the
+Henyey-Greenstein asymmetry, layer thickness) through `layer_optics` and
+`column_optics`, in addition to derivatives with respect to wavelength,
+scattering angle and irradiance. Inelastic processes and measured phase
+tables are floating point only; see
+[Forward-mode automatic differentiation](@ref) for what is and is not
+differentiable. ForwardDiff is not a dependency of the package.
 
 OceanOptics.jl **does not** solve radiative transfer. That work lives
 in the consumer (e.g. `vSmartMOM.jl`), which maps the column optics onto
